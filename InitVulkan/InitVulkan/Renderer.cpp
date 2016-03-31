@@ -1,6 +1,8 @@
 
 #include "Renderer.h"
 
+#include <GLFW\glfw3.h>
+
 
 Renderer::Renderer()
 {
@@ -17,14 +19,28 @@ Renderer::~Renderer()
 void Renderer::InitVKInstance()
 {
 	VkApplicationInfo vkApplicationInfo {};
-	vkApplicationInfo.sType						= VK_STRUCTURE_TYPE_APPLICATION_INFO;
-	vkApplicationInfo.apiVersion				= VK_API_VERSION;
-	vkApplicationInfo.applicationVersion		= VK_MAKE_VERSION( 0, 1, 0 );
-	vkApplicationInfo.pApplicationName			= "First taste of vulkan";
+	vkApplicationInfo.sType							= VK_STRUCTURE_TYPE_APPLICATION_INFO;
+	vkApplicationInfo.apiVersion					= VK_API_VERSION;
+	vkApplicationInfo.applicationVersion			= VK_MAKE_VERSION( 0, 1, 0 );
+	vkApplicationInfo.pApplicationName				= "First taste of vulkan";
+	vkApplicationInfo.pEngineName					= nullptr;
+
+	/*std::vector<const char*> enabledExtensions;
+	enabledExtensions.push_back( VK_KHR_SURFACE_EXTENSION_NAME );
+#if defined( _WIN32 )
+	enabledExtensions.push_back( VK_KHR_WIN32_SURFACE_EXTENSION_NAME );
+#else
+	enabledExtensions.push_back( VK_KHR_XCB_SURFACE_EXTENSION_NAME );
+#endif
+	*/
 
 	VkInstanceCreateInfo vkInstanceCreateInfo {};
-	vkInstanceCreateInfo.sType					= VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-	vkInstanceCreateInfo.pApplicationInfo		= &vkApplicationInfo;
+	vkInstanceCreateInfo.sType						= VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+	vkInstanceCreateInfo.pApplicationInfo			= &vkApplicationInfo;
+	vkInstanceCreateInfo.ppEnabledExtensionNames	= nullptr;
+	vkInstanceCreateInfo.enabledExtensionCount		= 0;
+	vkInstanceCreateInfo.ppEnabledLayerNames		= nullptr;
+	vkInstanceCreateInfo.enabledLayerCount			= 0;
 
 	auto err = vkCreateInstance( &vkInstanceCreateInfo, nullptr, &vkInstance );
 
@@ -60,16 +76,29 @@ void Renderer::InitDevice()
 	vkDeviceQueueCreateInfo.pQueuePriorities	= queuePriorities;
 	vkDeviceQueueCreateInfo.queueFamilyIndex	= graphicsFamilyIndex;
 
+	std::vector<const char *> enabledExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+
 	VkDeviceCreateInfo vkDeviceCreateInfo {};
 	vkDeviceCreateInfo.sType					= VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 	vkDeviceCreateInfo.queueCreateInfoCount		= 1;
 	vkDeviceCreateInfo.pQueueCreateInfos		= &vkDeviceQueueCreateInfo;
-	
+	vkDeviceCreateInfo.ppEnabledExtensionNames	= enabledExtensions.data();
+
+
+
+
 	auto err = vkCreateDevice( gpu, &vkDeviceCreateInfo, nullptr, &vkDevice );
 
 	if (err != VK_SUCCESS)
 	{
 		assert( 0 && "Vulken error: create device failed!" );
+		std::exit( -1 );
+	}
+
+	// Init GLFW
+	if (!glfwInit())
+	{
+		assert( 0 && "GLFW error: init GLFW failed!" );
 		std::exit( -1 );
 	}
 }
@@ -88,7 +117,9 @@ void Renderer::CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList )
 		std::vector<VkQueueFamilyProperties> familyPropertyList( familyCount );
 		vkGetPhysicalDeviceQueueFamilyProperties( gpu, &familyCount, familyPropertyList.data() );
 
-		// Check which one of these families support graphics bit
+		// Check which one of these families support graphics bit, note that
+		// here only check the graphics support, in most cases compute pipeline,
+		// transfer, sparse memory support should be checked as well
 		for (uint32_t familyIndex = 0; familyIndex < familyCount; familyIndex++)
 		{
 			if (familyPropertyList[familyIndex].queueFlags & VK_QUEUE_GRAPHICS_BIT)
