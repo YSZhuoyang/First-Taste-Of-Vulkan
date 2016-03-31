@@ -25,6 +25,6 @@ private:
 	VkPhysicalDevice				gpu						= nullptr;
 	VkPhysicalDeviceProperties		gpuProperties			= {};
 
-	uint32_t				graphicsFamilyIndex		= 0;
+	uint32_t						graphicsFamilyIndex		= 0;
 };
 
