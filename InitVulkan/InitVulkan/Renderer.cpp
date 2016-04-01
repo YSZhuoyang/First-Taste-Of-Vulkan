@@ -1,3 +1,4 @@
+#define GLFW_INCLUDE_VULKAN
 
 #include "Renderer.h"
 
@@ -100,7 +101,18 @@ void Renderer::InitDevice()
 	{
 		assert( 0 && "GLFW error: init GLFW failed!" );
 		std::exit( -1 );
+
+		if (!glfwVulkanSupported())
+		{
+
+		}
 	}
+
+
+
+	//glfwGetInstanceProcAddress
+
+
 }
 
 void Renderer::CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList )
