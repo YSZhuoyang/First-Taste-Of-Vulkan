@@ -9,16 +9,28 @@ Renderer::Renderer()
 {
 	InitVKInstance();
 	InitDevice();
+	CreateWindow();
 }
 
 Renderer::~Renderer()
 {
+	DestroyWindow();
 	DestroyDevice();
 	DestroyVKInstance();
 }
 
 void Renderer::InitVKInstance()
 {
+	// Init GLFW
+	if (!glfwInit())
+	{
+		assert( 0 && "GLFW error: init GLFW failed!" );
+		std::exit( -1 );
+	}
+
+	unsigned int extCount;
+	const char** extensions = glfwGetRequiredInstanceExtensions( &extCount );
+
 	VkApplicationInfo vkApplicationInfo {};
 	vkApplicationInfo.sType							= VK_STRUCTURE_TYPE_APPLICATION_INFO;
 	vkApplicationInfo.apiVersion					= VK_API_VERSION;
@@ -38,8 +50,8 @@ void Renderer::InitVKInstance()
 	VkInstanceCreateInfo vkInstanceCreateInfo {};
 	vkInstanceCreateInfo.sType						= VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	vkInstanceCreateInfo.pApplicationInfo			= &vkApplicationInfo;
-	vkInstanceCreateInfo.ppEnabledExtensionNames	= nullptr;
-	vkInstanceCreateInfo.enabledExtensionCount		= 0;
+	vkInstanceCreateInfo.enabledExtensionCount		= extCount;
+	vkInstanceCreateInfo.ppEnabledExtensionNames	= extensions;
 	vkInstanceCreateInfo.ppEnabledLayerNames		= nullptr;
 	vkInstanceCreateInfo.enabledLayerCount			= 0;
 
@@ -85,9 +97,6 @@ void Renderer::InitDevice()
 	vkDeviceCreateInfo.pQueueCreateInfos		= &vkDeviceQueueCreateInfo;
 	vkDeviceCreateInfo.ppEnabledExtensionNames	= enabledExtensions.data();
 
-
-
-
 	auto err = vkCreateDevice( gpu, &vkDeviceCreateInfo, nullptr, &vkDevice );
 
 	if (err != VK_SUCCESS)
@@ -95,24 +104,6 @@ void Renderer::InitDevice()
 		assert( 0 && "Vulken error: create device failed!" );
 		std::exit( -1 );
 	}
-
-	// Init GLFW
-	if (!glfwInit())
-	{
-		assert( 0 && "GLFW error: init GLFW failed!" );
-		std::exit( -1 );
-
-		if (!glfwVulkanSupported())
-		{
-
-		}
-	}
-
-
-
-	//glfwGetInstanceProcAddress
-
-
 }
 
 void Renderer::CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList )
@@ -155,6 +146,26 @@ void Renderer::CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList )
 		assert( 0 && "Vulkan error: queue family supporting graphics not found!" );
 		std::exit( -1 );
 	}
+}
+
+void Renderer::CreateWindow()
+{
+	glfwWindowHint( GLFW_CLIENT_API, GLFW_NO_API );
+	GLFWwindow* window = glfwCreateWindow( 640, 480, "First taste of Vulkan", nullptr, nullptr );
+
+	VkResult err = glfwCreateWindowSurface( vkInstance, window, nullptr, &vkSurface );
+
+	if (err)
+	{
+		assert( 0 && "Vulkan error: create window surface failed!" );
+		std::exit( -1 );
+	}
+}
+
+void Renderer::DestroyWindow()
+{
+	vkDestroySurfaceKHR( vkInstance, vkSurface, nullptr );
+	vkSurface = NULL;
 }
 
 void Renderer::DestroyDevice()
