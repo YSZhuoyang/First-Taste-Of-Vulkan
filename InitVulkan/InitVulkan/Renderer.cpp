@@ -9,12 +9,14 @@ Renderer::Renderer()
 {
 	InitVKInstance();
 	InitDevice();
+	InitCommandPool();
 	CreateWindow();
 }
 
 Renderer::~Renderer()
 {
 	DestroyWindow();
+	DestroyCommandPool();
 	DestroyDevice();
 	DestroyVKInstance();
 }
@@ -67,7 +69,7 @@ void Renderer::InitVKInstance()
 void Renderer::DestroyVKInstance()
 {
 	vkDestroyInstance( vkInstance, nullptr );
-	vkInstance = nullptr;
+	vkInstance = VK_NULL_HANDLE;
 }
 
 void Renderer::InitDevice()
@@ -104,13 +106,16 @@ void Renderer::InitDevice()
 		assert( 0 && "Vulken error: create device failed!" );
 		std::exit( -1 );
 	}
+
+	// The param queue index need to be smaller than the queue count
+	vkGetDeviceQueue( vkDevice, graphicsFamilyIndex, 0, &vkQueue );
 }
 
 void Renderer::CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList )
 {
 	bool found = false;
 
-	for (int gpuIndex = 0; gpuIndex < gpuList.size(); gpuIndex++)
+	for (unsigned int gpuIndex = 0; gpuIndex < gpuList.size(); gpuIndex++)
 	{
 		gpu = gpuList[gpuIndex];
 
@@ -151,7 +156,7 @@ void Renderer::CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList )
 void Renderer::CreateWindow()
 {
 	glfwWindowHint( GLFW_CLIENT_API, GLFW_NO_API );
-	GLFWwindow* window = glfwCreateWindow( 640, 480, "First taste of Vulkan", nullptr, nullptr );
+	GLFWwindow* window = glfwCreateWindow( width, height, "First taste of Vulkan", nullptr, nullptr );
 
 	VkResult err = glfwCreateWindowSurface( vkInstance, window, nullptr, &vkSurface );
 
@@ -165,11 +170,131 @@ void Renderer::CreateWindow()
 void Renderer::DestroyWindow()
 {
 	vkDestroySurfaceKHR( vkInstance, vkSurface, nullptr );
-	vkSurface = NULL;
+	vkSurface = VK_NULL_HANDLE;
 }
 
 void Renderer::DestroyDevice()
 {
 	vkDestroyDevice( vkDevice, nullptr );
-	vkDevice = nullptr;
+	vkDevice = VK_NULL_HANDLE;
+}
+
+void Renderer::InitCommandPool()
+{
+	VkCommandPoolCreateInfo vkCommandPoolCreateInfo {};
+	vkCommandPoolCreateInfo.sType					= VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	vkCommandPoolCreateInfo.queueFamilyIndex		= graphicsFamilyIndex;
+	vkCommandPoolCreateInfo.flags					= VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+
+	vkCreateCommandPool( vkDevice, &vkCommandPoolCreateInfo, nullptr, &vkCommandPool );
+
+	// Allocate command buffers
+	VkCommandBufferAllocateInfo vkCommandBufferAllocateInfo {};
+	vkCommandBufferAllocateInfo.sType				= VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	vkCommandBufferAllocateInfo.commandBufferCount	= 2;
+	vkCommandBufferAllocateInfo.commandPool			= vkCommandPool;
+	vkCommandBufferAllocateInfo.level				= VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+
+	/* -------------- Set up the first command buffer ----------------- */
+	VkCommandBufferBeginInfo vkCommandBufferBeginInfo {};
+	vkCommandBufferBeginInfo.sType				= VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+	// Command buffer state is set to initial state
+	vkAllocateCommandBuffers( vkDevice, &vkCommandBufferAllocateInfo, vkCommandBuffers );
+
+	// Command buffer state changes to recording state
+	vkBeginCommandBuffer( vkCommandBuffers[0], &vkCommandBufferBeginInfo );
+
+	// Viewport need to be set up for every command buffer!!
+	VkViewport vkViewport;
+	vkViewport.height								= height;
+	vkViewport.width								= width;
+	vkViewport.maxDepth								= 1.0f;
+	vkViewport.minDepth								= 0.0f;
+	vkViewport.x									= 0.0f;
+	vkViewport.y									= 0.0f;
+
+	vkCmdSetViewport( vkCommandBuffers[0], 0, 1, &vkViewport );
+
+	// Command buffer state changes to executable state
+	vkEndCommandBuffer( vkCommandBuffers[0] );
+
+	/* -------------- Set up the second command buffer ----------------- */
+	VkCommandBufferBeginInfo vkCommandBufferBeginInfo {};
+	vkCommandBufferBeginInfo.sType					= VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+	// Command buffer state is set to initial state
+	vkAllocateCommandBuffers( vkDevice, &vkCommandBufferAllocateInfo, &vkCommandBuffers[1] );
+
+	// Command buffer state changes to recording state
+	vkBeginCommandBuffer( vkCommandBuffers[1], &vkCommandBufferBeginInfo );
+
+	// Viewport need to be set up for every command buffer!!
+	VkViewport vkViewport;
+	vkViewport.height								= height;
+	vkViewport.width								= width;
+	vkViewport.maxDepth								= 1.0f;
+	vkViewport.minDepth								= 0.0f;
+	vkViewport.x									= 0.0f;
+	vkViewport.y									= 0.0f;
+
+	vkCmdSetViewport( vkCommandBuffers[1], 0, 1, &vkViewport );
+
+	// Command buffer state changes to executable state
+	vkEndCommandBuffer( vkCommandBuffers[1] );
+
+	// Create semaphore which tells the gpu when other processes on gpu 
+	// have completed, which means it lets gpu to handle queue submissions
+	VkSemaphoreCreateInfo vkSemaphoreCreateInfo {};
+	vkSemaphoreCreateInfo.sType						= VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+	vkCreateSemaphore( vkDevice, &vkSemaphoreCreateInfo, nullptr, &vkSemaphore );
+
+	// Create fence which is used for sychronize gpu command submission
+	// Fence wait for the gpu to be ready for the cpu side
+	VkFenceCreateInfo vkFenceCreateInfo {};
+	vkFenceCreateInfo.sType							= VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+
+	vkCreateFence( vkDevice, &vkFenceCreateInfo, nullptr, &vkFence );
+
+	/* ------------------ First submit ------------------- */
+	VkSubmitInfo vkSubmitInfo {};
+	vkSubmitInfo.sType								= VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	vkSubmitInfo.commandBufferCount					= 1;
+	vkSubmitInfo.pCommandBuffers					= &vkCommandBuffers[0];
+	vkSubmitInfo.signalSemaphoreCount				= 1;
+	vkSubmitInfo.pWaitSemaphores					= &vkSemaphore;
+
+	vkQueueSubmit( vkQueue, 1, &vkSubmitInfo, VK_NULL_HANDLE );
+
+	/* ------------------ Second submit ------------------- */
+	// Means the second submission will wait for the first submission to complete
+	// all commands
+	VkPipelineStageFlags vkPipelineStageFlags[] { VK_PIPELINE_STAGE_ALL_COMMANDS_BIT };
+
+	VkSubmitInfo vkSubmitInfo {};
+	vkSubmitInfo.sType								= VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	vkSubmitInfo.commandBufferCount					= 1;
+	vkSubmitInfo.pCommandBuffers					= &vkCommandBuffers[1];
+	vkSubmitInfo.signalSemaphoreCount				= 1;
+	vkSubmitInfo.pWaitSemaphores					= &vkSemaphore;
+	vkSubmitInfo.pWaitDstStageMask					= vkPipelineStageFlags;
+
+	vkQueueSubmit( vkQueue, 1, &vkSubmitInfo, VK_NULL_HANDLE );
+
+	vkQueueWaitIdle( vkQueue );
+
+	//auto res = vkWaitForFences( vkDevice, 1, &vkFence, VK_TRUE, UINT64_MAX );
+}
+
+void Renderer::DestroyCommandPool()
+{
+	vkDestroySemaphore( vkDevice, vkSemaphore, nullptr );
+	vkSemaphore = VK_NULL_HANDLE;
+
+	vkDestroyFence( vkDevice, vkFence, nullptr );
+	vkFence = VK_NULL_HANDLE;
+
+	vkDestroyCommandPool( vkDevice, vkCommandPool, nullptr );
+	vkCommandPool = VK_NULL_HANDLE;
 }
