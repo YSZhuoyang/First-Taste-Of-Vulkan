@@ -17,6 +17,7 @@ private:
 	void DestroyVKInstance();
 
 	void InitDevice();
+	void InitSwapChain();
 	void CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList );
 	void CreateWindow();
 	void DestroyWindow();

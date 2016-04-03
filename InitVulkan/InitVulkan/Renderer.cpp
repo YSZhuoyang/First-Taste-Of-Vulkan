@@ -97,6 +97,7 @@ void Renderer::InitDevice()
 	vkDeviceCreateInfo.sType					= VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 	vkDeviceCreateInfo.queueCreateInfoCount		= 1;
 	vkDeviceCreateInfo.pQueueCreateInfos		= &vkDeviceQueueCreateInfo;
+	vkDeviceCreateInfo.enabledExtensionCount	= enabledExtensions.size();
 	vkDeviceCreateInfo.ppEnabledExtensionNames	= enabledExtensions.data();
 
 	auto err = vkCreateDevice( gpu, &vkDeviceCreateInfo, nullptr, &vkDevice );
@@ -109,6 +110,18 @@ void Renderer::InitDevice()
 
 	// The param queue index need to be smaller than the queue count
 	vkGetDeviceQueue( vkDevice, graphicsFamilyIndex, 0, &vkQueue );
+}
+
+void Renderer::InitSwapChain()
+{
+	VkSurfaceCapabilitiesKHR vkSurfaceCaps {};
+	auto res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR( gpu, vkSurface, &vkSurfaceCaps );
+
+	if (res != VK_SUCCESS)
+	{
+		assert( 0 && "Vulken error: get physical device surface cap failed!" );
+		std::exit( -1 );
+	}
 }
 
 void Renderer::CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList )
@@ -162,7 +175,7 @@ void Renderer::CreateWindow()
 
 	if (err)
 	{
-		assert( 0 && "Vulkan error: create window surface failed!" );
+		assert( 0 && "Vulkan error: create surface failed!" );
 		std::exit( -1 );
 	}
 }
