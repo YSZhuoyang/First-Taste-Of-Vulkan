@@ -8,5 +8,6 @@ namespace DataStructures
 	{
 		VkImage vkImage;
 		VkImageView vkImageView;
+		VkFramebuffer frameBuffer;
 	};
 }

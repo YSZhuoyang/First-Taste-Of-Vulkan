@@ -21,6 +21,7 @@ private:
 	void CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList );
 	void CreateWindow();
 	void DestroyWindow();
+	void DestroySwapChain();
 	void DestroyDevice();
 	void InitCommandPool();
 	void DestroyCommandPool();
@@ -29,12 +30,13 @@ private:
 	VkDevice						vkDevice				= VK_NULL_HANDLE;
 	VkPhysicalDevice				gpu						= VK_NULL_HANDLE;
 	VkPhysicalDeviceProperties		gpuProperties			= {};
+	VkSwapchainKHR					vkSwapChain				= VK_NULL_HANDLE;
 
 	VkCommandPool					vkCommandPool			= VK_NULL_HANDLE;
 	VkQueue							vkQueue					= VK_NULL_HANDLE;
 	VkFence							vkFence					= VK_NULL_HANDLE;
 	VkSemaphore						vkSemaphore				= VK_NULL_HANDLE;
-	VkCommandBuffer					vkCommandBuffers[2];
+	VkCommandBuffer					vkCommandBuffers[1];	// 2
 
 	VkSurfaceKHR					vkSurface				= VK_NULL_HANDLE;
 	unsigned int					height					= 480;

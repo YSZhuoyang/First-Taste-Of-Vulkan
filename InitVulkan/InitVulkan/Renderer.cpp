@@ -1,22 +1,27 @@
 #define GLFW_INCLUDE_VULKAN
 
 #include "Renderer.h"
+#include "DataStructures.h"
 
 #include <GLFW\glfw3.h>
 
+
+using namespace DataStructures;
 
 Renderer::Renderer()
 {
 	InitVKInstance();
 	InitDevice();
-	InitCommandPool();
 	CreateWindow();
+	InitSwapChain();
+	InitCommandPool();
 }
 
 Renderer::~Renderer()
 {
 	DestroyWindow();
 	DestroyCommandPool();
+	DestroySwapChain();
 	DestroyDevice();
 	DestroyVKInstance();
 }
@@ -35,7 +40,7 @@ void Renderer::InitVKInstance()
 
 	VkApplicationInfo vkApplicationInfo {};
 	vkApplicationInfo.sType							= VK_STRUCTURE_TYPE_APPLICATION_INFO;
-	vkApplicationInfo.apiVersion					= VK_API_VERSION;
+	vkApplicationInfo.apiVersion					= VK_API_VERSION_1_0;
 	vkApplicationInfo.applicationVersion			= VK_MAKE_VERSION( 0, 1, 0 );
 	vkApplicationInfo.pApplicationName				= "First taste of vulkan";
 	vkApplicationInfo.pEngineName					= nullptr;
@@ -114,14 +119,128 @@ void Renderer::InitDevice()
 
 void Renderer::InitSwapChain()
 {
+	VkResult res;
+
 	VkSurfaceCapabilitiesKHR vkSurfaceCaps {};
-	auto res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR( gpu, vkSurface, &vkSurfaceCaps );
+	res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR( gpu, vkSurface, &vkSurfaceCaps );
 
 	if (res != VK_SUCCESS)
 	{
 		assert( 0 && "Vulken error: get physical device surface cap failed!" );
 		std::exit( -1 );
 	}
+
+	VkExtent2D swapChainExtent = {};
+
+	if (swapChainExtent.height == -1 && swapChainExtent.width == -1)
+	{
+		swapChainExtent.width = width;
+		swapChainExtent.height = height;
+	}
+	else
+	{
+		swapChainExtent = vkSurfaceCaps.currentExtent;
+	}
+
+	// Get present modes
+	uint32_t presentModeCount = 0;
+
+	res = vkGetPhysicalDeviceSurfacePresentModesKHR( gpu, vkSurface, &presentModeCount, nullptr );
+	assert( res == VK_SUCCESS && presentModeCount >= 1 );
+
+	std::vector<VkPresentModeKHR> vkPresentModes( presentModeCount );
+	res = vkGetPhysicalDeviceSurfacePresentModesKHR( gpu, vkSurface, &presentModeCount, vkPresentModes.data() );
+	assert( res == VK_SUCCESS );
+
+	VkPresentModeKHR vkPresentMode = VK_PRESENT_MODE_FIFO_KHR;
+
+	for (int i = 0; i < presentModeCount; i++)
+	{
+		if (vkPresentModes[i] == VK_PRESENT_MODE_MAILBOX_KHR)
+		{
+			vkPresentMode = VK_PRESENT_MODE_MAILBOX_KHR;
+			break;
+		}
+
+		if (vkPresentModes[i] == VK_PRESENT_MODE_IMMEDIATE_KHR)
+		{
+			vkPresentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
+		}
+	}
+
+	assert( vkSurfaceCaps.maxImageCount >= 1 );
+
+	uint32_t imageCount = vkSurfaceCaps.minImageCount + 1;
+
+	if (imageCount > vkSurfaceCaps.maxImageCount)
+	{
+		imageCount = vkSurfaceCaps.maxImageCount;
+	}
+
+	// Get image format
+	VkFormat colorFormat;
+	VkColorSpaceKHR colorSpace;
+	uint32_t formatCount = 0;
+
+	vkGetPhysicalDeviceSurfaceFormatsKHR( gpu, vkSurface, &formatCount, nullptr );
+	std::vector<VkSurfaceFormatKHR> surfaceFormats( formatCount );
+	vkGetPhysicalDeviceSurfaceFormatsKHR( gpu, vkSurface, &formatCount, surfaceFormats.data() );
+
+	if (formatCount == 1 && surfaceFormats[0].format == VK_FORMAT_UNDEFINED)
+	{
+		colorFormat = VK_FORMAT_B8G8R8A8_UNORM;
+	}
+	else
+	{
+		assert( formatCount >= 1 );
+		colorFormat = surfaceFormats[0].format;
+	}
+
+	colorSpace = surfaceFormats[0].colorSpace;
+
+	// Create swap chain
+	VkSwapchainCreateInfoKHR vkSwapChainCreateInfo = {};
+	vkSwapChainCreateInfo.sType					= VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+	vkSwapChainCreateInfo.surface				= vkSurface;
+	vkSwapChainCreateInfo.minImageCount			= imageCount;
+	vkSwapChainCreateInfo.imageFormat			= colorFormat;
+	vkSwapChainCreateInfo.imageColorSpace		= colorSpace;
+	vkSwapChainCreateInfo.imageExtent			=	{ swapChainExtent.width, swapChainExtent.height };
+	vkSwapChainCreateInfo.presentMode			= vkPresentMode;
+	vkSwapChainCreateInfo.imageArrayLayers		= 1;
+	vkSwapChainCreateInfo.imageUsage			= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+	vkSwapChainCreateInfo.imageSharingMode		= VK_SHARING_MODE_EXCLUSIVE;
+	vkSwapChainCreateInfo.queueFamilyIndexCount = 1;
+	vkSwapChainCreateInfo.pQueueFamilyIndices	= { 0 };
+	vkSwapChainCreateInfo.preTransform			= VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+	vkSwapChainCreateInfo.compositeAlpha		= VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+
+	res = vkCreateSwapchainKHR( vkDevice, &vkSwapChainCreateInfo, nullptr, &vkSwapChain );
+	assert( res == VK_SUCCESS );
+
+	std::vector<VkImage> vkImages(imageCount);
+	std::vector<SwapChainBuffer> swapChainBuffers(imageCount);
+
+	res = vkGetSwapchainImagesKHR( vkDevice, vkSwapChain, &imageCount, vkImages.data() );
+	assert( res == VK_SUCCESS );
+
+	VkImageViewCreateInfo imageViewCreateInfo = {};
+	imageViewCreateInfo.sType					= VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	imageViewCreateInfo.pNext					= VK_NULL_HANDLE;
+	imageViewCreateInfo.format					= colorFormat;
+	imageViewCreateInfo.subresourceRange.aspectMask		= VK_IMAGE_ASPECT_COLOR_BIT;
+	imageViewCreateInfo.subresourceRange.baseMipLevel	= 0;
+	imageViewCreateInfo.subresourceRange.levelCount		= 1;
+	imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
+	imageViewCreateInfo.subresourceRange.layerCount		= 1;
+	imageViewCreateInfo.viewType				= VK_IMAGE_VIEW_TYPE_2D;
+	imageViewCreateInfo.flags					= 0;
+	imageViewCreateInfo.components				= { VK_COMPONENT_SWIZZLE_R,
+													VK_COMPONENT_SWIZZLE_G,
+													VK_COMPONENT_SWIZZLE_B,
+													VK_COMPONENT_SWIZZLE_A };
+
+
 }
 
 void Renderer::CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList )
@@ -184,6 +303,12 @@ void Renderer::DestroyWindow()
 {
 	vkDestroySurfaceKHR( vkInstance, vkSurface, nullptr );
 	vkSurface = VK_NULL_HANDLE;
+	glfwDestroyWindow( glfwGetCurrentContext() );
+}
+
+void Renderer::DestroySwapChain()
+{
+	vkDestroySwapchainKHR( vkDevice, vkSwapChain, nullptr );
 }
 
 void Renderer::DestroyDevice()
@@ -204,7 +329,7 @@ void Renderer::InitCommandPool()
 	// Allocate command buffers
 	VkCommandBufferAllocateInfo vkCommandBufferAllocateInfo {};
 	vkCommandBufferAllocateInfo.sType				= VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-	vkCommandBufferAllocateInfo.commandBufferCount	= 2;
+	vkCommandBufferAllocateInfo.commandBufferCount	= 1;	// 2
 	vkCommandBufferAllocateInfo.commandPool			= vkCommandPool;
 	vkCommandBufferAllocateInfo.level				= VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 
@@ -233,7 +358,7 @@ void Renderer::InitCommandPool()
 	vkEndCommandBuffer( vkCommandBuffers[0] );
 
 	/* -------------- Set up the second command buffer ----------------- */
-	VkCommandBufferBeginInfo vkCommandBufferBeginInfo {};
+	/*VkCommandBufferBeginInfo vkCommandBufferBeginInfo {};
 	vkCommandBufferBeginInfo.sType					= VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
 	// Command buffer state is set to initial state
@@ -255,6 +380,7 @@ void Renderer::InitCommandPool()
 
 	// Command buffer state changes to executable state
 	vkEndCommandBuffer( vkCommandBuffers[1] );
+	*/
 
 	// Create semaphore which tells the gpu when other processes on gpu 
 	// have completed, which means it lets gpu to handle queue submissions
@@ -275,15 +401,16 @@ void Renderer::InitCommandPool()
 	vkSubmitInfo.sType								= VK_STRUCTURE_TYPE_SUBMIT_INFO;
 	vkSubmitInfo.commandBufferCount					= 1;
 	vkSubmitInfo.pCommandBuffers					= &vkCommandBuffers[0];
-	vkSubmitInfo.signalSemaphoreCount				= 1;
-	vkSubmitInfo.pWaitSemaphores					= &vkSemaphore;
+	//vkSubmitInfo.signalSemaphoreCount				= 1;
+	//vkSubmitInfo.pWaitSemaphores					= &vkSemaphore;
 
-	vkQueueSubmit( vkQueue, 1, &vkSubmitInfo, VK_NULL_HANDLE );
+	//vkQueueSubmit( vkQueue, 1, &vkSubmitInfo, VK_NULL_HANDLE );
+	vkQueueSubmit( vkQueue, 1, &vkSubmitInfo, vkFence );
 
 	/* ------------------ Second submit ------------------- */
 	// Means the second submission will wait for the first submission to complete
 	// all commands
-	VkPipelineStageFlags vkPipelineStageFlags[] { VK_PIPELINE_STAGE_ALL_COMMANDS_BIT };
+	/*VkPipelineStageFlags vkPipelineStageFlags[] { VK_PIPELINE_STAGE_ALL_COMMANDS_BIT };
 
 	VkSubmitInfo vkSubmitInfo {};
 	vkSubmitInfo.sType								= VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -294,10 +421,10 @@ void Renderer::InitCommandPool()
 	vkSubmitInfo.pWaitDstStageMask					= vkPipelineStageFlags;
 
 	vkQueueSubmit( vkQueue, 1, &vkSubmitInfo, VK_NULL_HANDLE );
+	*/
 
-	vkQueueWaitIdle( vkQueue );
-
-	//auto res = vkWaitForFences( vkDevice, 1, &vkFence, VK_TRUE, UINT64_MAX );
+	//vkQueueWaitIdle( vkQueue );
+	auto res = vkWaitForFences( vkDevice, 1, &vkFence, VK_TRUE, UINT64_MAX );
 }
 
 void Renderer::DestroyCommandPool()
