@@ -7,6 +7,11 @@ int main()
 
 	printf( "finished" );
 
+	while (r.IsRunning())
+	{
+		//r.Update();
+	}
+
 	getchar();
 
 	return 0;
