@@ -237,7 +237,7 @@ void VKResources::RecordCommandBuffers()
 	assert( res == VK_SUCCESS );
 	}*/
 }
-void VKResources::CreateSwapChain()
+void VKResources::CreateSwapChain( int windowHeight, int windowWidth )
 {
 	VkResult res;
 

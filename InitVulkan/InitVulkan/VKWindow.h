@@ -16,6 +16,8 @@ namespace GLFWWindowResources
 
 		void CreateWindow( VkInstance vkInstance, VkSurfaceKHR vkSurface );
 		void DestroyWindow();
+		int GetHeight();
+		int GetWidth();
 		GLFWwindow* GetWindowInstance();
 
 	private:

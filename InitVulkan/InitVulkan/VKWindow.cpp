@@ -42,6 +42,16 @@ void VKWindow::DestroyWindow()
 	window = nullptr;
 }
 
+int GLFWWindowResources::VKWindow::GetHeight()
+{
+	return windowHeight;
+}
+
+int GLFWWindowResources::VKWindow::GetWidth()
+{
+	return windowWidth;
+}
+
 GLFWwindow* GLFWWindowResources::VKWindow::GetWindowInstance()
 {
 	return window;

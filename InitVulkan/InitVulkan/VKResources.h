@@ -21,7 +21,7 @@ namespace VulkanResources
 		void InitDevice();
 		void CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList );
 		void CreateCommandPool();
-		void CreateSwapChain();
+		void CreateSwapChain( int windowHeight, int windowWidth );
 		void GetSwapChainNext( VkSemaphore presentCompleteSemaphore, uint32_t imageIndex );
 
 		VkInstance GetInstance();
@@ -37,6 +37,7 @@ namespace VulkanResources
 		void CreateCommandBuffers();
 		void RecordCommandBuffers();
 
+		// Instance and devices
 		VkInstance						vkInstance				= VK_NULL_HANDLE;
 		VkDevice						vkDevice				= VK_NULL_HANDLE;
 		VkPhysicalDevice				gpu						= VK_NULL_HANDLE;
@@ -56,11 +57,7 @@ namespace VulkanResources
 		std::vector<VkCommandBuffer>	vkCommandBuffers;
 
 		VkSurfaceKHR					vkSurface				= VK_NULL_HANDLE;
-		int								windowHeight			= 640;
-		int								windowWidth				= 960;
 		uint32_t						surfaceHeight			= 600;
 		uint32_t						surfaceWidth			= 940;
-
-		//GLFWwindow*						window					= VK_NULL_HANDLE;
 	};
 }

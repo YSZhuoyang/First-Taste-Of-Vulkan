@@ -7,13 +7,14 @@ using namespace DataStructures;
 Renderer::Renderer()
 {
 	vkResources = new VKResources();
+	vkWindow = new VKWindow();
+
 	vkResources->InitVKInstance();
 	vkResources->InitDevice();
-	vkResources->CreateSwapChain();
+	vkResources->CreateSwapChain( vkWindow->GetHeight(), vkWindow->GetWidth() );
 	vkResources->CreateCommandPool();
 
-	vkWindow = new VKWindow();
-	vkWindow->CreateWindow(vkResources->GetInstance(), vkResources->GetSurface());
+	vkWindow->CreateWindow( vkResources->GetInstance(), vkResources->GetSurface() );
 }
 
 Renderer::~Renderer()
