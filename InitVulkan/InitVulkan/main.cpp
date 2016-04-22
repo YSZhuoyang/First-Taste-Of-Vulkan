@@ -9,7 +9,7 @@ int main()
 
 	while (r.IsRunning())
 	{
-		//r.Update();
+		r.Update();
 	}
 
 	getchar();

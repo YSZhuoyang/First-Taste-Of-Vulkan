@@ -1,5 +1,8 @@
 #pragma once
 
+#define GLFW_INCLUDE_VULKAN
+
+#include <GLFW\glfw3.h>
 #include <vulkan\vulkan.h>
 #include <cstdlib>
 #include <assert.h>
@@ -21,7 +24,10 @@ namespace VulkanResources
 		void InitDevice();
 		void CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList );
 		void CreateCommandPool();
-		void CreateSwapChain( int windowHeight, int windowWidth );
+		void CreateSwapChain();
+		void CreateWindow();
+		GLFWwindow * GetWindowInstance();
+		void DestroyWindow();
 		void GetSwapChainNext( VkSemaphore presentCompleteSemaphore, uint32_t imageIndex );
 
 		VkInstance GetInstance();
@@ -55,6 +61,10 @@ namespace VulkanResources
 		uint32_t						graphicsFamilyIndex		= 0;
 		uint32_t						imageCount				= 0;
 		std::vector<VkCommandBuffer>	vkCommandBuffers;
+
+		GLFWwindow*						window					= nullptr;
+		int								windowHeight			= 640;
+		int								windowWidth				= 960;
 
 		VkSurfaceKHR					vkSurface				= VK_NULL_HANDLE;
 		uint32_t						surfaceHeight			= 600;

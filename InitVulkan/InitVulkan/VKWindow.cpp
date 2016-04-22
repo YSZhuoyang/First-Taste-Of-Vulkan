@@ -23,9 +23,8 @@ void VKWindow::CreateWindow( VkInstance vkInstance, VkSurfaceKHR vkSurface )
 
 	VkResult res = glfwCreateWindowSurface( vkInstance, window, nullptr, &vkSurface );
 
-	glfwGetFramebufferSize( window, &windowWidth, &windowHeight );
-	glfwShowWindow( window );
-	//glfwMakeContextCurrent( window );
+	//glfwGetFramebufferSize( window, &windowWidth, &windowHeight );
+	//glfwShowWindow( window );
 
 	if (res != VK_SUCCESS)
 	{

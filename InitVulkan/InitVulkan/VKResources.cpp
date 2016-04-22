@@ -1,14 +1,12 @@
 #include "VKResources.h"
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW\glfw3.h>
+
 
 using namespace VulkanResources;
 using namespace DataStructures;
 
 VKResources::VKResources()
 {
-	InitVKInstance();
-	InitDevice();
+	
 }
 
 
@@ -110,11 +108,12 @@ void VKResources::InitDevice()
 	// The param queue index need to be smaller than the queue count
 	vkGetDeviceQueue( vkDevice, graphicsFamilyIndex, 0, &vkQueue );
 }
+
 void VKResources::CreateCommandPool()
 {
 	VkResult res;
 
-	VkCommandPoolCreateInfo vkCommandPoolCreateInfo {};
+	VkCommandPoolCreateInfo vkCommandPoolCreateInfo = {};
 	vkCommandPoolCreateInfo.sType					= VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 	vkCommandPoolCreateInfo.pNext					= VK_NULL_HANDLE;
 	vkCommandPoolCreateInfo.queueFamilyIndex		= graphicsFamilyIndex;
@@ -133,12 +132,12 @@ void VKResources::CreateCommandBuffers()
 	// Retrieve number of images / buffers
 	vkGetSwapchainImagesKHR( vkDevice, vkSwapChain, &imageCount, VK_NULL_HANDLE );
 
-	if (imageCount == 0)
+	/*if (imageCount == 0)
 	{
 		assert( 0 && "Vulken error: get swap chain number failed!" );
 		glfwTerminate();
 		std::exit( -1 );
-	}
+	}*/
 
 	vkCommandBuffers.resize( imageCount );
 
@@ -237,7 +236,38 @@ void VKResources::RecordCommandBuffers()
 	assert( res == VK_SUCCESS );
 	}*/
 }
-void VKResources::CreateSwapChain( int windowHeight, int windowWidth )
+
+void VKResources::CreateWindow()
+{
+	// Tell GLFW not to create OpenGL context with a window
+	glfwWindowHint( GLFW_CLIENT_API, GLFW_NO_API );
+	window = glfwCreateWindow( windowWidth, windowHeight, "First taste of Vulkan", nullptr, nullptr );
+
+	VkResult res = glfwCreateWindowSurface( vkInstance, window, nullptr, &vkSurface );
+
+	//glfwGetFramebufferSize( window, &windowWidth, &windowHeight );
+
+	if (res != VK_SUCCESS)
+	{
+		assert( 0 && "Vulkan error: create surface failed!" );
+		glfwTerminate();
+		std::exit( -1 );
+	}
+}
+
+GLFWwindow* VKResources::GetWindowInstance()
+{
+	return window;
+}
+
+void VKResources::DestroyWindow()
+{
+	glfwDestroyWindow( window );
+	glfwTerminate();
+	window = nullptr;
+}
+
+void VKResources::CreateSwapChain()
 {
 	VkResult res;
 
@@ -338,6 +368,8 @@ void VKResources::CreateSwapChain( int windowHeight, int windowWidth )
 	vkSwapChainCreateInfo.preTransform					= VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
 	vkSwapChainCreateInfo.compositeAlpha				= VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 	vkSwapChainCreateInfo.oldSwapchain					= oldSwapChain;
+
+	vkCreateSwapchainKHR( vkDevice, &vkSwapChainCreateInfo, VK_NULL_HANDLE, &vkSwapChain );
 }
 
 VkInstance VKResources::GetInstance()
@@ -354,7 +386,7 @@ void VKResources::GetSwapChainNext( VkSemaphore presentCompleteSemaphore, uint32
 {
 	VkResult res;
 
-	vkAcquireNextImageKHR( vkDevice, vkSwapChain, 0, vkSemaphore, (VkFence) 0, &imageIndex );
+	res = vkAcquireNextImageKHR( vkDevice, vkSwapChain, 0, vkSemaphore, (VkFence) 0, &imageIndex );
 	assert( res == VK_SUCCESS );
 }
 

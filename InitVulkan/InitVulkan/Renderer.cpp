@@ -7,23 +7,18 @@ using namespace DataStructures;
 Renderer::Renderer()
 {
 	vkResources = new VKResources();
-	vkWindow = new VKWindow();
 
 	vkResources->InitVKInstance();
 	vkResources->InitDevice();
-	vkResources->CreateSwapChain( vkWindow->GetHeight(), vkWindow->GetWidth() );
+	vkResources->CreateWindow();
+	vkResources->CreateSwapChain();
 	vkResources->CreateCommandPool();
-
-	vkWindow->CreateWindow( vkResources->GetInstance(), vkResources->GetSurface() );
 }
 
 Renderer::~Renderer()
 {
 	delete vkResources;
 	vkResources = nullptr;
-
-	delete vkWindow;
-	vkWindow = nullptr;
 }
 
 void Renderer::Stop()
@@ -38,10 +33,14 @@ bool Renderer::IsRunning()
 
 void Renderer::Update()
 {
-	Render();
+	while (!glfwWindowShouldClose( vkResources->GetWindowInstance() ))
+	{
+		glfwPollEvents();
+		Render();
+	}
 }
 
 void Renderer::Render()
 {
-	//glfwSwapBuffers( window );
+	
 }
