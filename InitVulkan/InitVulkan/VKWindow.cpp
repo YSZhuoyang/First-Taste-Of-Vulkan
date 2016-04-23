@@ -9,29 +9,16 @@ VKWindow::VKWindow()
 	
 }
 
-
 VKWindow::~VKWindow()
 {
 	DestroyWindow();
 }
 
-void VKWindow::CreateWindow( VkInstance vkInstance, VkSurfaceKHR vkSurface )
+void VKWindow::CreateWindow()
 {
 	// Tell GLFW not to create OpenGL context with a window
 	glfwWindowHint( GLFW_CLIENT_API, GLFW_NO_API );
 	window = glfwCreateWindow( windowWidth, windowHeight, "First taste of Vulkan", nullptr, nullptr );
-
-	VkResult res = glfwCreateWindowSurface( vkInstance, window, nullptr, &vkSurface );
-
-	//glfwGetFramebufferSize( window, &windowWidth, &windowHeight );
-	//glfwShowWindow( window );
-
-	if (res != VK_SUCCESS)
-	{
-		assert( 0 && "Vulkan error: create surface failed!" );
-		glfwTerminate();
-		std::exit( -1 );
-	}
 }
 
 void VKWindow::DestroyWindow()
@@ -41,17 +28,27 @@ void VKWindow::DestroyWindow()
 	window = nullptr;
 }
 
-int GLFWWindowResources::VKWindow::GetHeight()
+int VKWindow::GetHeight()
 {
 	return windowHeight;
 }
 
-int GLFWWindowResources::VKWindow::GetWidth()
+int VKWindow::GetWidth()
 {
 	return windowWidth;
 }
 
-GLFWwindow* GLFWWindowResources::VKWindow::GetWindowInstance()
+GLFWwindow* VKWindow::GetWindowInstance()
 {
 	return window;
+}
+
+void VKWindow::Resize()
+{
+
+}
+
+void VKWindow::Close()
+{
+
 }

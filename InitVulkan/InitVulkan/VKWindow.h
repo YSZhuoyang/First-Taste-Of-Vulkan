@@ -1,6 +1,5 @@
 #pragma once
 
-#include <vulkan\vulkan.h>
 #include <GLFW\glfw3.h>
 #include <assert.h>
 #include <cstdlib>
@@ -14,11 +13,16 @@ namespace GLFWWindowResources
 		VKWindow();
 		~VKWindow();
 
-		void CreateWindow( VkInstance vkInstance, VkSurfaceKHR vkSurface );
+		void CreateWindow();
 		void DestroyWindow();
 		int GetHeight();
 		int GetWidth();
 		GLFWwindow* GetWindowInstance();
+
+		// Callback functions
+		void Resize();
+		void Close();
+
 
 	private:
 		GLFWwindow*						window					= nullptr;

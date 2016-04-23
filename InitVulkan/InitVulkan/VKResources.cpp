@@ -6,9 +6,21 @@ using namespace DataStructures;
 
 VKResources::VKResources()
 {
-	
-}
+	// Init GLFW
+	if (!glfwInit())
+	{
+		assert( 0 && "GLFW error: init GLFW failed!" );
+		std::exit( -1 );
+	}
 
+	// check for vulkan support
+	if (GLFW_FALSE == glfwVulkanSupported())
+	{
+		// If not supported
+		glfwTerminate();
+		std::exit( -1 );
+	}
+}
 
 VKResources::~VKResources()
 {
@@ -21,21 +33,6 @@ VKResources::~VKResources()
 
 void VKResources::InitVKInstance()
 {
-	// Init GLFW
-	if (!glfwInit())
-	{
-		assert( 0 && "GLFW error: init GLFW failed!" );
-		std::exit( -1 );
-	}
-
-	// check for vulkan support
-	if (GLFW_FALSE == glfwVulkanSupported())
-	{
-		// not supported
-		glfwTerminate();
-		std::exit( -1 );
-	}
-
 	unsigned int instanceExtensionsCount;
 	const char** instanceExtensionsBuffer = glfwGetRequiredInstanceExtensions( &instanceExtensionsCount );
 
@@ -132,12 +129,12 @@ void VKResources::CreateCommandBuffers()
 	// Retrieve number of images / buffers
 	vkGetSwapchainImagesKHR( vkDevice, vkSwapChain, &imageCount, VK_NULL_HANDLE );
 
-	/*if (imageCount == 0)
+	if (imageCount == 0)
 	{
 		assert( 0 && "Vulken error: get swap chain number failed!" );
 		glfwTerminate();
 		std::exit( -1 );
-	}*/
+	}
 
 	vkCommandBuffers.resize( imageCount );
 
@@ -237,12 +234,8 @@ void VKResources::RecordCommandBuffers()
 	}*/
 }
 
-void VKResources::CreateWindow()
+void VKResources::CreateSurface( GLFWwindow* window )
 {
-	// Tell GLFW not to create OpenGL context with a window
-	glfwWindowHint( GLFW_CLIENT_API, GLFW_NO_API );
-	window = glfwCreateWindow( windowWidth, windowHeight, "First taste of Vulkan", nullptr, nullptr );
-
 	VkResult res = glfwCreateWindowSurface( vkInstance, window, nullptr, &vkSurface );
 
 	//glfwGetFramebufferSize( window, &windowWidth, &windowHeight );
@@ -255,19 +248,7 @@ void VKResources::CreateWindow()
 	}
 }
 
-GLFWwindow* VKResources::GetWindowInstance()
-{
-	return window;
-}
-
-void VKResources::DestroyWindow()
-{
-	glfwDestroyWindow( window );
-	glfwTerminate();
-	window = nullptr;
-}
-
-void VKResources::CreateSwapChain()
+void VKResources::CreateSwapChain( int windowHeight, int windowWidth )
 {
 	VkResult res;
 

@@ -5,14 +5,12 @@ int main()
 {
 	Renderer r;
 
-	printf( "finished" );
+	printf( "Renderer initialized successfully" );
 
 	while (r.IsRunning())
 	{
 		r.Update();
 	}
-
-	getchar();
 
 	return 0;
 }

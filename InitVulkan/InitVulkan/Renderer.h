@@ -35,7 +35,6 @@ private:
 	void Render();
 
 	VKResources*					vkResources				= nullptr;
-
-	//VKWindow*						vkWindow				= nullptr;
+	VKWindow*						vkWindow				= nullptr;
 	bool							isRunning				= true;
 };
