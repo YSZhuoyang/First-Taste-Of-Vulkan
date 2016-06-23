@@ -45,7 +45,7 @@ GLFWwindow* VKWindow::GetWindowInstance()
 
 void VKWindow::Resize()
 {
-
+	
 }
 
 void VKWindow::Close()

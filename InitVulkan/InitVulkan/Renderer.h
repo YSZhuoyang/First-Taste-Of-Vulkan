@@ -26,12 +26,6 @@ public:
 	bool IsRunning();
 
 private:
-	/*
-	void setImageLayout( VkCommandBuffer cmdBuffer, VkImage image,
-		VkImageAspectFlags aspects,
-		VkImageLayout oldLayout,
-		VkImageLayout newLayout );*/
-
 	void Render();
 
 	VKResources*					vkResources				= nullptr;

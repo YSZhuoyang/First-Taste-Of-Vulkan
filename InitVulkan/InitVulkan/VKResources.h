@@ -25,7 +25,9 @@ namespace VulkanResources
 		void CreateSurface( GLFWwindow * window );
 		void CreateSwapChain( int windowHeight, int windowWidth );
 		void CreateCommandPool();
-		void GetSwapChainNext( VkSemaphore presentCompleteSemaphore, uint32_t imageIndex );
+		void PresentQueue( uint32_t imageIndex );
+
+		uint32_t AcquireImage();
 
 		VkInstance GetInstance();
 		VkSurfaceKHR GetSurface();
@@ -37,31 +39,33 @@ namespace VulkanResources
 		void DestroySurface();
 
 	private:
+		void CreateSemaphores();
 		void CreateCommandBuffers();
 		void RecordCommandBuffers();
 		void CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList );
 
 		// Instance and devices
-		VkInstance						vkInstance				= VK_NULL_HANDLE;
-		VkDevice						vkDevice				= VK_NULL_HANDLE;
-		VkPhysicalDevice				gpu						= VK_NULL_HANDLE;
-		VkPhysicalDeviceProperties		gpuProperties			= {};
+		VkInstance						vkInstance					= VK_NULL_HANDLE;
+		VkDevice						vkDevice					= VK_NULL_HANDLE;
+		VkPhysicalDevice				gpu							= VK_NULL_HANDLE;
+		VkPhysicalDeviceProperties		gpuProperties				= {};
 
 		// Swap chain
-		VkSwapchainKHR					vkSwapChain				= VK_NULL_HANDLE;
+		VkSwapchainKHR					vkSwapChain					= VK_NULL_HANDLE;
 		std::vector<SwapChainBuffer>	swapChainBuffers;
 
 		// Command pool
-		VkCommandPool					vkCommandPool			= VK_NULL_HANDLE;
-		VkQueue							vkQueue					= VK_NULL_HANDLE;
-		VkFence							vkFence					= VK_NULL_HANDLE;
-		VkSemaphore						vkSemaphore				= VK_NULL_HANDLE;
-		uint32_t						graphicsFamilyIndex		= 0;
-		uint32_t						imageCount				= 0;
+		VkCommandPool					vkCommandPool				= VK_NULL_HANDLE;
+		VkQueue							vkQueue						= VK_NULL_HANDLE;
+		VkFence							vkFence						= VK_NULL_HANDLE;
+		VkSemaphore						imageAvailableSemaphore		= VK_NULL_HANDLE;
+		VkSemaphore						renderingFinishedSemaphore	= VK_NULL_HANDLE;
+		uint32_t						graphicsFamilyIndex			= 0;
+		uint32_t						imageCount					= 0;
 		std::vector<VkCommandBuffer>	vkCommandBuffers;
 
-		VkSurfaceKHR					vkSurface				= VK_NULL_HANDLE;
-		uint32_t						surfaceHeight			= 600;
-		uint32_t						surfaceWidth			= 940;
+		VkSurfaceKHR					vkSurface					= VK_NULL_HANDLE;
+		uint32_t						surfaceHeight				= 600;
+		uint32_t						surfaceWidth				= 940;
 	};
 }

@@ -47,5 +47,6 @@ void Renderer::Update()
 
 void Renderer::Render()
 {
-	
+	uint32_t imageIndex = vkResources->AcquireImage();
+	vkResources->PresentQueue( imageIndex );
 }

@@ -104,6 +104,9 @@ void VKResources::InitDevice()
 
 	// The param queue index need to be smaller than the queue count
 	vkGetDeviceQueue( vkDevice, graphicsFamilyIndex, 0, &vkQueue );
+
+	// Create semaphores
+	CreateSemaphores();
 }
 
 void VKResources::CreateCommandPool()
@@ -121,6 +124,83 @@ void VKResources::CreateCommandPool()
 
 	CreateCommandBuffers();
 	RecordCommandBuffers();
+}
+
+void VKResources::PresentQueue( uint32_t imageIndex )
+{
+	VkPresentInfoKHR present_info			= {};
+	present_info.sType						= VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+	present_info.pNext						= VK_NULL_HANDLE;
+	present_info.waitSemaphoreCount			= 1;
+	present_info.pWaitSemaphores			= &renderingFinishedSemaphore;
+	present_info.swapchainCount				= 1;
+	present_info.pSwapchains				= &vkSwapChain;
+	present_info.pImageIndices				= &imageIndex;
+	present_info.pResults					= VK_NULL_HANDLE;
+
+	VkResult result = vkQueuePresentKHR( vkQueue, &present_info );
+
+	switch (result)
+	{
+		case VK_SUCCESS:
+			break;
+
+		case VK_SUBOPTIMAL_KHR:
+			break;
+
+		case VK_ERROR_OUT_OF_DATE_KHR:
+			// To be added
+			//OnWindowSizeChanged();
+			break;
+
+		default:
+			assert( 0 && "Problem occurred during swap chain image acquisition!" );
+			break;
+	}
+}
+
+uint32_t VKResources::AcquireImage()
+{
+	uint32_t image_index;
+	VkResult result = vkAcquireNextImageKHR(
+		vkDevice,
+		vkSwapChain,
+		UINT64_MAX,
+		imageAvailableSemaphore,
+		VK_NULL_HANDLE,
+		&image_index );
+
+	switch (result)
+	{
+		case VK_SUCCESS:
+			break;
+		
+		case VK_SUBOPTIMAL_KHR:
+			break;
+
+		case VK_ERROR_OUT_OF_DATE_KHR:
+			// To be added
+			//OnWindowSizeChanged();
+			break;
+
+		default:
+			assert( 0 && "Problem occurred during swap chain image acquisition!" );
+			break;
+	}
+
+	return image_index;
+}
+
+void VKResources::CreateSemaphores()
+{
+	// Need error check
+	VkSemaphoreCreateInfo vkSemaphoreCreateInfo	= {};
+	vkSemaphoreCreateInfo.sType					= VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+	vkSemaphoreCreateInfo.pNext					= VK_NULL_HANDLE;
+	vkSemaphoreCreateInfo.flags					= 0;
+
+	vkCreateSemaphore( vkDevice, &vkSemaphoreCreateInfo, VK_NULL_HANDLE, &imageAvailableSemaphore );
+	vkCreateSemaphore( vkDevice, &vkSemaphoreCreateInfo, VK_NULL_HANDLE, &renderingFinishedSemaphore );
 }
 
 void VKResources::CreateCommandBuffers()
@@ -165,6 +245,17 @@ void VKResources::RecordCommandBuffers()
 	subresources.levelCount					= 1;
 	subresources.layerCount					= 1;
 
+	VkCommandBufferBeginInfo vkCommandBufferBeginInfo		= {};
+	vkCommandBufferBeginInfo.sType							= VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	vkCommandBufferBeginInfo.pNext							= VK_NULL_HANDLE;
+	vkCommandBufferBeginInfo.flags							= VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+	vkCommandBufferBeginInfo.pInheritanceInfo				= VK_NULL_HANDLE;
+
+	VkClearColorValue clearColor =
+	{
+		{ 1.0f, 0.8f, 0.4f, 0.0f }
+	};
+
 	for (uint32_t i = 0; i < imageCount; i++)
 	{
 		VkImageMemoryBarrier barrier_from_present_to_clear	= {};
@@ -190,48 +281,35 @@ void VKResources::RecordCommandBuffers()
 		barrier_from_clear_to_present.dstQueueFamilyIndex	= graphicsFamilyIndex;
 		barrier_from_clear_to_present.image					= vkImages[i];
 		barrier_from_clear_to_present.subresourceRange		= subresources;
+
+		vkBeginCommandBuffer( vkCommandBuffers[i], &vkCommandBufferBeginInfo );
+		
+		vkCmdPipelineBarrier(
+			vkCommandBuffers[i],
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			0, 0, VK_NULL_HANDLE, 0, VK_NULL_HANDLE, 1,
+			&barrier_from_present_to_clear );
+		vkCmdClearColorImage(
+			vkCommandBuffers[i],
+			vkImages[i],
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			&clearColor, 1, &subresources );
+		vkCmdPipelineBarrier(
+			vkCommandBuffers[i],
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+			0, 0, VK_NULL_HANDLE, 0, VK_NULL_HANDLE, 1,
+			&barrier_from_clear_to_present );
+
+		res = vkEndCommandBuffer( vkCommandBuffers[i] );
+
+		if (res != VK_SUCCESS)
+		{
+			assert( 0 && "Vulken error: could not record command buffers!" );
+			std::exit( -1 );
+		}
 	}
-
-	// Create an image view and a framebuffer for each image
-	/*for (uint32_t i = 0; i < imageCount; i++)
-	{
-	VkImageViewCreateInfo vkImageViewCreateInfo				= {};
-	vkImageViewCreateInfo.sType								= VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-	vkImageViewCreateInfo.pNext								= VK_NULL_HANDLE;
-	vkImageViewCreateInfo.format							= colorFormat;
-	vkImageViewCreateInfo.subresourceRange.aspectMask		= VK_IMAGE_ASPECT_COLOR_BIT;
-	vkImageViewCreateInfo.subresourceRange.baseMipLevel		= 0;
-	vkImageViewCreateInfo.subresourceRange.levelCount		= 1;
-	vkImageViewCreateInfo.subresourceRange.baseArrayLayer	= 0;
-	vkImageViewCreateInfo.subresourceRange.layerCount		= 1;
-	vkImageViewCreateInfo.viewType							= VK_IMAGE_VIEW_TYPE_2D;
-	vkImageViewCreateInfo.flags								= 0;
-	vkImageViewCreateInfo.components						= { VK_COMPONENT_SWIZZLE_R,
-	VK_COMPONENT_SWIZZLE_G,
-	VK_COMPONENT_SWIZZLE_B,
-	VK_COMPONENT_SWIZZLE_A };
-
-	swapChainBuffers[i].vkImage = vkImages[i];
-	setImageLayout( vkCommandBuffer, vkImages[i],
-	VK_IMAGE_ASPECT_COLOR_BIT,
-	VK_IMAGE_LAYOUT_UNDEFINED,
-	VK_IMAGE_LAYOUT_PRESENT_SRC_KHR );
-	vkImageViewCreateInfo.image = swapChainBuffers[i].vkImage;
-
-	res = vkCreateImageView( vkDevice, &vkImageViewCreateInfo, VK_NULL_HANDLE, &swapChainBuffers[i].vkImageView );
-	assert( res == VK_SUCCESS );
-
-	// Create framebuffer
-	VkFramebufferCreateInfo vkFramebufferCreateInfo				= {};
-	vkFramebufferCreateInfo.sType								= VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-	vkFramebufferCreateInfo.attachmentCount						= 1;
-	vkFramebufferCreateInfo.width								= swapChainExtent.width;
-	vkFramebufferCreateInfo.height								= swapChainExtent.height;
-	vkFramebufferCreateInfo.layers								= 1;
-
-	res = vkCreateFramebuffer( vkDevice, &vkFramebufferCreateInfo, VK_NULL_HANDLE, &swapChainBuffers[i].frameBuffer );
-	assert( res == VK_SUCCESS );
-	}*/
 }
 
 void VKResources::CreateSurface( GLFWwindow* window )
@@ -351,6 +429,11 @@ void VKResources::CreateSwapChain( int windowHeight, int windowWidth )
 	vkSwapChainCreateInfo.oldSwapchain					= oldSwapChain;
 
 	vkCreateSwapchainKHR( vkDevice, &vkSwapChainCreateInfo, VK_NULL_HANDLE, &vkSwapChain );
+
+	if (oldSwapChain != VK_NULL_HANDLE)
+	{
+		vkDestroySwapchainKHR( vkDevice, oldSwapChain, VK_NULL_HANDLE );
+	}
 }
 
 VkInstance VKResources::GetInstance()
@@ -361,14 +444,6 @@ VkInstance VKResources::GetInstance()
 VkSurfaceKHR VKResources::GetSurface()
 {
 	return vkSurface;
-}
-
-void VKResources::GetSwapChainNext( VkSemaphore presentCompleteSemaphore, uint32_t imageIndex )
-{
-	VkResult res;
-
-	res = vkAcquireNextImageKHR( vkDevice, vkSwapChain, 0, vkSemaphore, (VkFence) 0, &imageIndex );
-	assert( res == VK_SUCCESS );
 }
 
 void VKResources::CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList )
@@ -429,14 +504,18 @@ void VKResources::DestroySwapChain()
 
 void VKResources::DestroyDevice()
 {
+	vkDeviceWaitIdle( vkDevice );
 	vkDestroyDevice( vkDevice, VK_NULL_HANDLE );
 	vkDevice = VK_NULL_HANDLE;
 }
 
 void VKResources::DestroyCommandPool()
 {
-	vkDestroySemaphore( vkDevice, vkSemaphore, VK_NULL_HANDLE );
-	vkSemaphore = VK_NULL_HANDLE;
+	vkDestroySemaphore( vkDevice, imageAvailableSemaphore, VK_NULL_HANDLE );
+	imageAvailableSemaphore = VK_NULL_HANDLE;
+
+	vkDestroySemaphore( vkDevice, renderingFinishedSemaphore, VK_NULL_HANDLE );
+	renderingFinishedSemaphore = VK_NULL_HANDLE;
 
 	vkDestroyFence( vkDevice, vkFence, VK_NULL_HANDLE );
 	vkFence = VK_NULL_HANDLE;
@@ -450,86 +529,3 @@ void VulkanResources::VKResources::DestroySurface()
 	vkDestroySurfaceKHR( vkInstance, vkSurface, VK_NULL_HANDLE );
 	vkSurface = VK_NULL_HANDLE;
 }
-
-/*void VKResources::setImageLayout(
-	VkCommandBuffer vkCommandBuffer,
-	VkImage image,
-	VkImageAspectFlags aspects,
-	VkImageLayout oldLayout,
-	VkImageLayout newLayout )
-{
-	// Create image memory barrier which separate actions into two groups:
-	// actions performed before the barrier and actions performed after the barrier
-	VkImageMemoryBarrier vkImageMemoryBarrier				= {};
-	vkImageMemoryBarrier.sType								= VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-	vkImageMemoryBarrier.oldLayout							= oldLayout;
-	vkImageMemoryBarrier.newLayout							= newLayout;
-	vkImageMemoryBarrier.image								= image;
-	vkImageMemoryBarrier.subresourceRange.aspectMask		= aspects;
-	vkImageMemoryBarrier.subresourceRange.baseMipLevel		= 0;
-	vkImageMemoryBarrier.subresourceRange.levelCount		= 1;
-	vkImageMemoryBarrier.subresourceRange.layerCount		= 1;
-
-	switch (oldLayout)
-	{
-		case VK_IMAGE_LAYOUT_PREINITIALIZED:
-			vkImageMemoryBarrier.srcAccessMask =
-				VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
-			break;
-
-		case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
-			vkImageMemoryBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-			break;
-
-		case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
-			vkImageMemoryBarrier.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-			break;
-
-		case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
-			vkImageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-			break;
-
-		case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
-			vkImageMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-			break;
-
-		default:
-			break;
-	}
-
-	switch (newLayout)
-	{
-		case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
-			vkImageMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-			break;
-
-		case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
-			vkImageMemoryBarrier.srcAccessMask |= VK_ACCESS_TRANSFER_READ_BIT;
-			vkImageMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-			break;
-
-		case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
-			vkImageMemoryBarrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-			vkImageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-			break;
-
-		case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
-			vkImageMemoryBarrier.dstAccessMask |=
-				VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-			break;
-
-		case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
-			vkImageMemoryBarrier.srcAccessMask =
-				VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
-			vkImageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-			break;
-
-		default:
-			break;
-	}
-
-	VkPipelineStageFlagBits srcFlags = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-	VkPipelineStageFlagBits dstFlags = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-
-	vkCmdPipelineBarrier( vkCommandBuffer, srcFlags, dstFlags, 0, 0, VK_NULL_HANDLE, 0, VK_NULL_HANDLE, 1, &vkImageMemoryBarrier );
-}*/
