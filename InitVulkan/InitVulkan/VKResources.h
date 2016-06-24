@@ -44,6 +44,8 @@ namespace VulkanResources
 		void RecordCommandBuffers();
 		bool CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList );
 
+		VkSurfaceFormatKHR GetSwapChainFormat( std::vector<VkSurfaceFormatKHR> &surfaceFormats );
+
 		// Instance and devices
 		VkInstance						vkInstance					= VK_NULL_HANDLE;
 		VkDevice						vkDevice					= VK_NULL_HANDLE;
@@ -57,11 +59,13 @@ namespace VulkanResources
 
 		// Command pool
 		VkCommandPool					vkCommandPool				= VK_NULL_HANDLE;
-		VkQueue							vkQueue						= VK_NULL_HANDLE;
+		VkQueue							vkGraphicsQueue				= VK_NULL_HANDLE;
+		VkQueue							vkPresentQueue				= VK_NULL_HANDLE;
 		VkFence							vkFence						= VK_NULL_HANDLE;
 		VkSemaphore						imageAvailableSemaphore		= VK_NULL_HANDLE;
 		VkSemaphore						renderingFinishedSemaphore	= VK_NULL_HANDLE;
-		uint32_t						graphicsFamilyIndex			= 0;
+		uint32_t						graphicsQueueFamilyIndex	= UINT32_MAX;
+		uint32_t						presentQueueFamilyIndex		= UINT32_MAX;
 		uint32_t						imageCount					= 0;
 		std::vector<VkCommandBuffer>	vkCommandBuffers;
 

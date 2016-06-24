@@ -82,20 +82,23 @@ void VKResources::InitDevice()
 		std::exit( -1 );
 	}
 
-	float queuePriorities[] { 1.0f };
+	std::vector<float> queuePriorities					= { 1.0f };
 	std::vector<const char *> enabledExtensions			= { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
 	VkDeviceQueueCreateInfo vkDeviceQueueCreateInfo		= {};
 	vkDeviceQueueCreateInfo.sType						= VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-	vkDeviceQueueCreateInfo.queueCount					= 1;
-	vkDeviceQueueCreateInfo.pQueuePriorities			= queuePriorities;
-	vkDeviceQueueCreateInfo.queueFamilyIndex			= graphicsFamilyIndex;
+	vkDeviceQueueCreateInfo.queueCount					= static_cast<uint32_t>(queuePriorities.size());
+	vkDeviceQueueCreateInfo.pQueuePriorities			= queuePriorities.data();
+	vkDeviceQueueCreateInfo.queueFamilyIndex			= graphicsQueueFamilyIndex;
+
+	std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+	queueCreateInfos.push_back( vkDeviceQueueCreateInfo );
 
 	VkDeviceCreateInfo vkDeviceCreateInfo				= {};
 	vkDeviceCreateInfo.sType							= VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-	vkDeviceCreateInfo.queueCreateInfoCount				= 1;
-	vkDeviceCreateInfo.pQueueCreateInfos				= &vkDeviceQueueCreateInfo;
-	vkDeviceCreateInfo.enabledExtensionCount			= enabledExtensions.size();
+	vkDeviceCreateInfo.queueCreateInfoCount				= static_cast<uint32_t>(queueCreateInfos.size());
+	vkDeviceCreateInfo.pQueueCreateInfos				= queueCreateInfos.data();
+	vkDeviceCreateInfo.enabledExtensionCount			= static_cast<uint32_t>(enabledExtensions.size());
 	vkDeviceCreateInfo.ppEnabledExtensionNames			= enabledExtensions.data();
 
 	auto res = vkCreateDevice( selectedGPU, &vkDeviceCreateInfo, VK_NULL_HANDLE, &vkDevice );
@@ -108,7 +111,8 @@ void VKResources::InitDevice()
 	}
 
 	// The param queue index need to be smaller than the queue count
-	vkGetDeviceQueue( vkDevice, graphicsFamilyIndex, 0, &vkQueue );
+	vkGetDeviceQueue( vkDevice, graphicsQueueFamilyIndex, 0, &vkGraphicsQueue );
+	vkGetDeviceQueue( vkDevice, presentQueueFamilyIndex, 0, &vkPresentQueue );
 
 	// Create semaphores
 	CreateSemaphores();
@@ -121,7 +125,7 @@ void VKResources::CreateCommandPool()
 	VkCommandPoolCreateInfo vkCommandPoolCreateInfo = {};
 	vkCommandPoolCreateInfo.sType					= VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 	vkCommandPoolCreateInfo.pNext					= VK_NULL_HANDLE;
-	vkCommandPoolCreateInfo.queueFamilyIndex		= graphicsFamilyIndex;
+	vkCommandPoolCreateInfo.queueFamilyIndex		= presentQueueFamilyIndex;
 	vkCommandPoolCreateInfo.flags					= VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 
 	res = vkCreateCommandPool( vkDevice, &vkCommandPoolCreateInfo, VK_NULL_HANDLE, &vkCommandPool );
@@ -133,17 +137,34 @@ void VKResources::CreateCommandPool()
 
 void VKResources::PresentQueue( uint32_t imageIndex )
 {
-	VkPresentInfoKHR present_info			= {};
-	present_info.sType						= VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-	present_info.pNext						= VK_NULL_HANDLE;
-	present_info.waitSemaphoreCount			= 1;
-	present_info.pWaitSemaphores			= &renderingFinishedSemaphore;
-	present_info.swapchainCount				= 1;
-	present_info.pSwapchains				= &vkSwapChain;
-	present_info.pImageIndices				= &imageIndex;
-	present_info.pResults					= VK_NULL_HANDLE;
+	// Submit image
+	VkPipelineStageFlags waitDstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
 
-	VkResult result = vkQueuePresentKHR( vkQueue, &present_info );
+	VkSubmitInfo submitInfo					= {};
+	submitInfo.sType						= VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submitInfo.pNext						= VK_NULL_HANDLE;
+	submitInfo.waitSemaphoreCount			= 1;
+	submitInfo.pWaitSemaphores				= &imageAvailableSemaphore;
+	submitInfo.pWaitDstStageMask			= &waitDstStageMask;
+	submitInfo.commandBufferCount			= 1;
+	submitInfo.pCommandBuffers				= &vkCommandBuffers[imageIndex];
+	submitInfo.signalSemaphoreCount			= 1;
+	submitInfo.pSignalSemaphores			= &renderingFinishedSemaphore;
+
+	vkQueueSubmit( vkPresentQueue, 1, &submitInfo, VK_NULL_HANDLE );
+	
+	// Present image
+	VkPresentInfoKHR presentInfo			= {};
+	presentInfo.sType						= VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+	presentInfo.pNext						= VK_NULL_HANDLE;
+	presentInfo.waitSemaphoreCount			= 1;
+	presentInfo.pWaitSemaphores				= &renderingFinishedSemaphore;
+	presentInfo.swapchainCount				= 1;
+	presentInfo.pSwapchains					= &vkSwapChain;
+	presentInfo.pImageIndices				= &imageIndex;
+	presentInfo.pResults					= VK_NULL_HANDLE;
+
+	VkResult result = vkQueuePresentKHR( vkPresentQueue, &presentInfo );
 
 	switch (result)
 	{
@@ -270,8 +291,8 @@ void VKResources::RecordCommandBuffers()
 		barrier_from_present_to_clear.dstAccessMask			= VK_ACCESS_TRANSFER_WRITE_BIT;
 		barrier_from_present_to_clear.oldLayout				= VK_IMAGE_LAYOUT_UNDEFINED;
 		barrier_from_present_to_clear.newLayout				= VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-		barrier_from_present_to_clear.srcQueueFamilyIndex	= graphicsFamilyIndex;
-		barrier_from_present_to_clear.dstQueueFamilyIndex	= graphicsFamilyIndex;
+		barrier_from_present_to_clear.srcQueueFamilyIndex	= presentQueueFamilyIndex;
+		barrier_from_present_to_clear.dstQueueFamilyIndex	= presentQueueFamilyIndex;
 		barrier_from_present_to_clear.image					= vkImages[i];
 		barrier_from_present_to_clear.subresourceRange		= subresources;
 
@@ -282,8 +303,8 @@ void VKResources::RecordCommandBuffers()
 		barrier_from_clear_to_present.dstAccessMask			= VK_ACCESS_MEMORY_READ_BIT;
 		barrier_from_clear_to_present.oldLayout				= VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 		barrier_from_clear_to_present.newLayout				= VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-		barrier_from_clear_to_present.srcQueueFamilyIndex	= graphicsFamilyIndex;
-		barrier_from_clear_to_present.dstQueueFamilyIndex	= graphicsFamilyIndex;
+		barrier_from_clear_to_present.srcQueueFamilyIndex	= presentQueueFamilyIndex;
+		barrier_from_clear_to_present.dstQueueFamilyIndex	= presentQueueFamilyIndex;
 		barrier_from_clear_to_present.image					= vkImages[i];
 		barrier_from_clear_to_present.subresourceRange		= subresources;
 
@@ -328,6 +349,28 @@ void VKResources::CreateSurface( GLFWwindow* window )
 		assert( 0 && "Vulkan error: create surface failed!" );
 		glfwTerminate();
 		std::exit( -1 );
+	}
+}
+
+VkSurfaceFormatKHR VKResources::GetSwapChainFormat( std::vector<VkSurfaceFormatKHR> &surfaceFormats )
+{
+	if (surfaceFormats.size() == 1 && surfaceFormats[0].format == VK_FORMAT_UNDEFINED)
+	{
+		return { VK_FORMAT_R8G8B8A8_UNORM, VK_COLORSPACE_SRGB_NONLINEAR_KHR };
+	}
+	else
+	{
+		assert( surfaceFormats.size() >= 1 );
+
+		for (VkSurfaceFormatKHR &surfaceFormat : surfaceFormats)
+		{
+			if (surfaceFormat.format == VK_FORMAT_R8G8B8A8_UNORM)
+			{
+				return surfaceFormat;
+			}
+		}
+
+		return surfaceFormats[0];
 	}
 }
 
@@ -393,31 +436,18 @@ void VKResources::CreateSwapChain( int windowHeight, int windowWidth )
 
 	uint32_t desiredNumberOfImages = vkSurfaceCaps.minImageCount + 1;
 
-	if (desiredNumberOfImages > vkSurfaceCaps.maxImageCount)
+	if (vkSurfaceCaps.maxImageCount > 0 && desiredNumberOfImages > vkSurfaceCaps.maxImageCount)
 	{
 		desiredNumberOfImages = vkSurfaceCaps.maxImageCount;
 	}
 
-	// Get image format
-	VkFormat colorFormat;
-	VkColorSpaceKHR colorSpace;
 	uint32_t formatCount = 0;
-
 	vkGetPhysicalDeviceSurfaceFormatsKHR( selectedGPU, vkSurface, &formatCount, VK_NULL_HANDLE );
 	std::vector<VkSurfaceFormatKHR> surfaceFormats( formatCount );
 	vkGetPhysicalDeviceSurfaceFormatsKHR( selectedGPU, vkSurface, &formatCount, surfaceFormats.data() );
 
-	if (formatCount == 1 && surfaceFormats[0].format == VK_FORMAT_UNDEFINED)
-	{
-		colorFormat = VK_FORMAT_B8G8R8A8_UNORM;
-	}
-	else
-	{
-		assert( formatCount >= 1 );
-		colorFormat = surfaceFormats[0].format;
-	}
-
-	colorSpace = surfaceFormats[0].colorSpace;
+	// Get image format and color space
+	VkSurfaceFormatKHR vkDesiredFormat = GetSwapChainFormat( surfaceFormats );
 	VkSwapchainKHR oldSwapChain = vkSwapChain;
 
 	// Create swap chain
@@ -425,17 +455,18 @@ void VKResources::CreateSwapChain( int windowHeight, int windowWidth )
 	vkSwapChainCreateInfo.sType							= VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
 	vkSwapChainCreateInfo.surface						= vkSurface;
 	vkSwapChainCreateInfo.minImageCount					= desiredNumberOfImages;
-	vkSwapChainCreateInfo.imageFormat					= colorFormat;
-	vkSwapChainCreateInfo.imageColorSpace				= colorSpace;
+	vkSwapChainCreateInfo.imageFormat					= vkDesiredFormat.format;
+	vkSwapChainCreateInfo.imageColorSpace				= vkDesiredFormat.colorSpace;
 	vkSwapChainCreateInfo.imageExtent					= { swapChainExtent.width, swapChainExtent.height };
 	vkSwapChainCreateInfo.presentMode					= vkPresentMode;
 	vkSwapChainCreateInfo.imageArrayLayers				= 1;
 	vkSwapChainCreateInfo.imageUsage					= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 	vkSwapChainCreateInfo.imageSharingMode				= VK_SHARING_MODE_EXCLUSIVE;
-	vkSwapChainCreateInfo.queueFamilyIndexCount			= 1;
-	vkSwapChainCreateInfo.pQueueFamilyIndices			= { 0 };
+	vkSwapChainCreateInfo.queueFamilyIndexCount			= 0;
+	vkSwapChainCreateInfo.pQueueFamilyIndices			= VK_NULL_HANDLE;
 	vkSwapChainCreateInfo.preTransform					= VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
 	vkSwapChainCreateInfo.compositeAlpha				= VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+	vkSwapChainCreateInfo.clipped						= VK_TRUE;
 	vkSwapChainCreateInfo.oldSwapchain					= oldSwapChain;
 
 	vkCreateSwapchainKHR( vkDevice, &vkSwapChainCreateInfo, VK_NULL_HANDLE, &vkSwapChain );
@@ -481,15 +512,21 @@ bool VKResources::CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList )
 		std::vector<VkQueueFamilyProperties> familyPropertyList( familyCount );
 		vkGetPhysicalDeviceQueueFamilyProperties( gpu, &familyCount, familyPropertyList.data() );
 
+		std::vector<VkBool32> queuePresentSupport( familyCount );
+
 		// Check which one of these families support graphics bit, note that
 		// here only check the graphics support, in most cases compute pipeline,
 		// transfer, sparse memory support should be checked as well
 		for (uint32_t familyIndex = 0; familyIndex < familyCount; familyIndex++)
 		{
-			if (familyPropertyList[familyIndex].queueCount > 0 && 
+			vkGetPhysicalDeviceSurfaceSupportKHR( gpu, familyIndex, vkSurface, &queuePresentSupport[familyIndex] );
+
+			if (queuePresentSupport[familyIndex] &&
+				familyPropertyList[familyIndex].queueCount > 0 &&
 				(familyPropertyList[familyIndex].queueFlags & VK_QUEUE_GRAPHICS_BIT))
 			{
-				graphicsFamilyIndex = familyIndex;
+				graphicsQueueFamilyIndex = familyIndex;
+				presentQueueFamilyIndex = familyIndex;
 
 				return true;
 			}
@@ -534,7 +571,7 @@ void VKResources::DestroyCommandPool()
 	vkCommandPool = VK_NULL_HANDLE;
 }
 
-void VulkanResources::VKResources::DestroySurface()
+void VKResources::DestroySurface()
 {
 	vkDestroySurfaceKHR( vkInstance, vkSurface, VK_NULL_HANDLE );
 	vkSurface = VK_NULL_HANDLE;
