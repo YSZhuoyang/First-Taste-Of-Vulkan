@@ -75,7 +75,12 @@ void VKResources::InitDevice()
 	vkEnumeratePhysicalDevices( vkInstance, &gpuCount, gpuList.data() );	// Return all gpu handles
 
 	// Select a device (GPU)
-	CheckAndSelectGPU( gpuList );
+	if (!CheckAndSelectGPU( gpuList ))
+	{
+		assert( 0 && "Vulkan error: queue family supporting graphics not found!" );
+		glfwTerminate();
+		std::exit( -1 );
+	}
 
 	float queuePriorities[] { 1.0f };
 	std::vector<const char *> enabledExtensions			= { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
@@ -93,7 +98,7 @@ void VKResources::InitDevice()
 	vkDeviceCreateInfo.enabledExtensionCount			= enabledExtensions.size();
 	vkDeviceCreateInfo.ppEnabledExtensionNames			= enabledExtensions.data();
 
-	auto res = vkCreateDevice( gpu, &vkDeviceCreateInfo, VK_NULL_HANDLE, &vkDevice );
+	auto res = vkCreateDevice( selectedGPU, &vkDeviceCreateInfo, VK_NULL_HANDLE, &vkDevice );
 
 	if (res != VK_SUCCESS)
 	{
@@ -330,8 +335,13 @@ void VKResources::CreateSwapChain( int windowHeight, int windowWidth )
 {
 	VkResult res;
 
+	if (vkDevice != VK_NULL_HANDLE)
+	{
+		vkDeviceWaitIdle( vkDevice );
+	}
+
 	VkSurfaceCapabilitiesKHR vkSurfaceCaps = {};
-	res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR( gpu, vkSurface, &vkSurfaceCaps );
+	res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR( selectedGPU, vkSurface, &vkSurfaceCaps );
 
 	if (res != VK_SUCCESS)
 	{
@@ -355,11 +365,11 @@ void VKResources::CreateSwapChain( int windowHeight, int windowWidth )
 	// Get present modes
 	uint32_t presentModeCount = 0;
 
-	res = vkGetPhysicalDeviceSurfacePresentModesKHR( gpu, vkSurface, &presentModeCount, VK_NULL_HANDLE );
+	res = vkGetPhysicalDeviceSurfacePresentModesKHR( selectedGPU, vkSurface, &presentModeCount, VK_NULL_HANDLE );
 	assert( res == VK_SUCCESS && presentModeCount >= 1 );
 
 	std::vector<VkPresentModeKHR> vkPresentModes( presentModeCount );
-	res = vkGetPhysicalDeviceSurfacePresentModesKHR( gpu, vkSurface, &presentModeCount, vkPresentModes.data() );
+	res = vkGetPhysicalDeviceSurfacePresentModesKHR( selectedGPU, vkSurface, &presentModeCount, vkPresentModes.data() );
 	assert( res == VK_SUCCESS );
 
 	VkPresentModeKHR vkPresentMode = VK_PRESENT_MODE_FIFO_KHR;
@@ -393,9 +403,9 @@ void VKResources::CreateSwapChain( int windowHeight, int windowWidth )
 	VkColorSpaceKHR colorSpace;
 	uint32_t formatCount = 0;
 
-	vkGetPhysicalDeviceSurfaceFormatsKHR( gpu, vkSurface, &formatCount, VK_NULL_HANDLE );
+	vkGetPhysicalDeviceSurfaceFormatsKHR( selectedGPU, vkSurface, &formatCount, VK_NULL_HANDLE );
 	std::vector<VkSurfaceFormatKHR> surfaceFormats( formatCount );
-	vkGetPhysicalDeviceSurfaceFormatsKHR( gpu, vkSurface, &formatCount, surfaceFormats.data() );
+	vkGetPhysicalDeviceSurfaceFormatsKHR( selectedGPU, vkSurface, &formatCount, surfaceFormats.data() );
 
 	if (formatCount == 1 && surfaceFormats[0].format == VK_FORMAT_UNDEFINED)
 	{
@@ -446,13 +456,24 @@ VkSurfaceKHR VKResources::GetSurface()
 	return vkSurface;
 }
 
-void VKResources::CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList )
+bool VKResources::CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList )
 {
-	bool found = false;
-
-	for (unsigned int gpuIndex = 0; gpuIndex < gpuList.size(); gpuIndex++)
+	for (VkPhysicalDevice gpu : gpuList)
 	{
-		gpu = gpuList[gpuIndex];
+		vkGetPhysicalDeviceProperties( gpu, &GPUProperties );
+		vkGetPhysicalDeviceFeatures( gpu, &GPUFeatures );
+
+		uint32_t majorVersion = VK_VERSION_MAJOR( GPUProperties.apiVersion );
+		uint32_t minorVersion = VK_VERSION_MINOR( GPUProperties.apiVersion );
+		uint32_t patchVersion = VK_VERSION_PATCH( GPUProperties.apiVersion );
+
+		if (majorVersion < 1 && GPUProperties.limits.maxImageDimension2D < 4096)
+		{
+			printf( "Physical device %s doesn't support required parameters!", GPUProperties.deviceName );
+			continue;
+		}
+
+		selectedGPU = gpu;
 
 		// Get family properties (Features e.g. graphics pipeline, compute pipeline and etc)
 		uint32_t familyCount = 0;
@@ -465,28 +486,17 @@ void VKResources::CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList )
 		// transfer, sparse memory support should be checked as well
 		for (uint32_t familyIndex = 0; familyIndex < familyCount; familyIndex++)
 		{
-			if (familyPropertyList[familyIndex].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+			if (familyPropertyList[familyIndex].queueCount > 0 && 
+				(familyPropertyList[familyIndex].queueFlags & VK_QUEUE_GRAPHICS_BIT))
 			{
-				found = true;
 				graphicsFamilyIndex = familyIndex;
-				break;
+
+				return true;
 			}
 		}
-
-		if (found)
-		{
-			vkGetPhysicalDeviceProperties( gpu, &gpuProperties );
-
-			break;
-		}
 	}
 
-	if (!found)
-	{
-		assert( 0 && "Vulkan error: queue family supporting graphics not found!" );
-		glfwTerminate();
-		std::exit( -1 );
-	}
+	return false;
 }
 
 void VKResources::DestroySwapChain()

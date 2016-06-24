@@ -42,13 +42,14 @@ namespace VulkanResources
 		void CreateSemaphores();
 		void CreateCommandBuffers();
 		void RecordCommandBuffers();
-		void CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList );
+		bool CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList );
 
 		// Instance and devices
 		VkInstance						vkInstance					= VK_NULL_HANDLE;
 		VkDevice						vkDevice					= VK_NULL_HANDLE;
-		VkPhysicalDevice				gpu							= VK_NULL_HANDLE;
-		VkPhysicalDeviceProperties		gpuProperties				= {};
+		VkPhysicalDevice				selectedGPU					= VK_NULL_HANDLE;
+		VkPhysicalDeviceProperties		GPUProperties				= {};
+		VkPhysicalDeviceFeatures		GPUFeatures					= {};
 
 		// Swap chain
 		VkSwapchainKHR					vkSwapChain					= VK_NULL_HANDLE;
