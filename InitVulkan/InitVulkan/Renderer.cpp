@@ -36,6 +36,13 @@ bool Renderer::IsRunning()
 	return isRunning;
 }
 
+bool Renderer::OnWindowSizeChanged()
+{
+
+
+	return true;
+}
+
 void Renderer::Update()
 {
 	while (!glfwWindowShouldClose( vkWindow->GetWindowInstance() ))
@@ -50,3 +57,5 @@ void Renderer::Render()
 	uint32_t imageIndex = vkResources->AcquireImage();
 	vkResources->PresentQueue( imageIndex );
 }
+
+

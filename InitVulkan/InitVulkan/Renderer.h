@@ -24,6 +24,7 @@ public:
 	void Stop();
 	void Update();
 	bool IsRunning();
+	bool OnWindowSizeChanged();
 
 private:
 	void Render();
