@@ -129,7 +129,7 @@ void VKResources::CreateCommandPool()
 	RecordCommandBuffers();
 }
 
-void VKResources::PresentQueue( uint32_t imageIndex )
+void VKResources::SubmitBuffers( uint32_t imageIndex, VKWindow* vkWindow )
 {
 	// Submit image
 	VkPipelineStageFlags waitDstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
@@ -165,12 +165,9 @@ void VKResources::PresentQueue( uint32_t imageIndex )
 		case VK_SUCCESS:
 			break;
 
-		case VK_SUBOPTIMAL_KHR:
-			break;
-
 		case VK_ERROR_OUT_OF_DATE_KHR:
-			// To be added
-			//OnWindowSizeChanged();
+		case VK_SUBOPTIMAL_KHR:
+			OnWindowSizeChanged( vkWindow );
 			break;
 
 		default:
@@ -179,7 +176,7 @@ void VKResources::PresentQueue( uint32_t imageIndex )
 	}
 }
 
-uint32_t VKResources::AcquireImageIndex()
+uint32_t VKResources::AcquireImageIndex( VKWindow* vkWindow )
 {
 	uint32_t image_index;
 	VkResult result = vkAcquireNextImageKHR(
@@ -188,19 +185,17 @@ uint32_t VKResources::AcquireImageIndex()
 		UINT64_MAX,
 		imageAvailableSemaphore,
 		VK_NULL_HANDLE,
-		&image_index );
+		&image_index
+	);
 
 	switch (result)
 	{
 		case VK_SUCCESS:
-			break;
-		
 		case VK_SUBOPTIMAL_KHR:
 			break;
 
 		case VK_ERROR_OUT_OF_DATE_KHR:
-			// To be added
-			//OnWindowSizeChanged();
+			OnWindowSizeChanged( vkWindow );
 			break;
 
 		default:
@@ -332,11 +327,45 @@ void VKResources::RecordCommandBuffers()
 	}
 }
 
+void VKResources::OnWindowSizeChanged( VKWindow* vkWindow )
+{
+	int windowWidth = 0;
+	int windowHeight = 0;
+
+	glfwGetWindowSize( vkWindow->GetWindowInstance(), &windowWidth, &windowHeight );
+
+	printf( "Window resize callback invoked: size: %d, %d", windowWidth, windowHeight );
+
+	vkWindow->SetWidth( windowWidth );
+	vkWindow->SetHeight( windowHeight );
+
+	// Free command buffers
+	vkDeviceWaitIdle( vkDevice );
+
+	if ((vkCommandBuffers.size() > 0) && (vkCommandBuffers[0] != VK_NULL_HANDLE))
+	{
+		vkFreeCommandBuffers(
+			vkDevice, 
+			vkCommandPool,
+			static_cast<uint32_t>(vkCommandBuffers.size()),
+			vkCommandBuffers.data()
+		);
+		vkCommandBuffers.clear();
+	}
+
+	if (vkCommandPool != VK_NULL_HANDLE)
+	{
+		vkDestroyCommandPool( vkDevice, vkCommandPool, VK_NULL_HANDLE );
+		vkCommandPool = VK_NULL_HANDLE;
+	}
+
+	// Re-create swap chain
+	CreateSwapChain( windowWidth, windowHeight );
+}
+
 void VKResources::CreateSurface( GLFWwindow* window )
 {
 	VkResult res = glfwCreateWindowSurface( vkInstance, window, nullptr, &vkSurface );
-
-	//glfwGetFramebufferSize( window, &windowWidth, &windowHeight );
 
 	if (res != VK_SUCCESS)
 	{

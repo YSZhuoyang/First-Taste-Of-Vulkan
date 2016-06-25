@@ -8,9 +8,11 @@
 #include <assert.h>
 #include <vector>
 
+#include "VKWindow.h"
 #include "DataStructures.h"
 
 using namespace DataStructures;
+using namespace GLFWWindowResources;
 
 namespace VulkanResources
 {
@@ -25,9 +27,9 @@ namespace VulkanResources
 		void CreateSurface( GLFWwindow * window );
 		void CreateSwapChain( int windowHeight, int windowWidth );
 		void CreateCommandPool();
-		void PresentQueue( uint32_t imageIndex );
+		void SubmitBuffers( uint32_t imageIndex, VKWindow* vkWindow );
 
-		uint32_t AcquireImageIndex();
+		uint32_t AcquireImageIndex( VKWindow* vkWindow );
 		VkInstance GetInstance();
 		VkSurfaceKHR GetSurface();
 
@@ -41,6 +43,7 @@ namespace VulkanResources
 		void CreateSemaphores();
 		void CreateCommandBuffers();
 		void RecordCommandBuffers();
+		void OnWindowSizeChanged( VKWindow* vkWindow );
 		bool CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList );
 
 		VkSurfaceFormatKHR GetSwapChainFormat();

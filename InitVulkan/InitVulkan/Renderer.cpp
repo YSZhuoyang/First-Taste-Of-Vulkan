@@ -47,15 +47,16 @@ void Renderer::Update()
 {
 	while (!glfwWindowShouldClose( vkWindow->GetWindowInstance() ))
 	{
-		glfwPollEvents();
 		Render();
+		glfwPollEvents();
 	}
+
+	glfwTerminate();
+	exit( EXIT_SUCCESS );
 }
 
 void Renderer::Render()
 {
-	uint32_t imageIndex = vkResources->AcquireImage();
-	vkResources->PresentQueue( imageIndex );
+	uint32_t imageIndex = vkResources->AcquireImageIndex( vkWindow );
+	vkResources->SubmitBuffers( imageIndex, vkWindow );
 }
-
-

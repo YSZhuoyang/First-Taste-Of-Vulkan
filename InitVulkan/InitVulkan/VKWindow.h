@@ -15,6 +15,8 @@ namespace GLFWWindowResources
 
 		void CreateWindow();
 		void DestroyWindow();
+		void SetWidth( int width );
+		void SetHeight( int height );
 		int GetHeight();
 		int GetWidth();
 		GLFWwindow* GetWindowInstance();
