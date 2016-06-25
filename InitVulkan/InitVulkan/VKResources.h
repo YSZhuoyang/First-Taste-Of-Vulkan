@@ -27,8 +27,7 @@ namespace VulkanResources
 		void CreateCommandPool();
 		void PresentQueue( uint32_t imageIndex );
 
-		uint32_t AcquireImage();
-
+		uint32_t AcquireImageIndex();
 		VkInstance GetInstance();
 		VkSurfaceKHR GetSurface();
 
@@ -44,7 +43,11 @@ namespace VulkanResources
 		void RecordCommandBuffers();
 		bool CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList );
 
-		VkSurfaceFormatKHR GetSwapChainFormat( std::vector<VkSurfaceFormatKHR> &surfaceFormats );
+		VkSurfaceFormatKHR GetSwapChainFormat();
+		VkImageUsageFlags GetSwapChainUsageFlags( VkSurfaceCapabilitiesKHR vkSurfaceCaps );
+		VkExtent2D GetSwapChainExtent( VkSurfaceCapabilitiesKHR vkSurfaceCaps );
+		VkSurfaceTransformFlagBitsKHR GetSwapChainTransform( VkSurfaceCapabilitiesKHR vkSurfaceCaps );
+		VkPresentModeKHR GetSwapChainPresentMode();
 
 		// Instance and devices
 		VkInstance						vkInstance					= VK_NULL_HANDLE;
@@ -70,7 +73,7 @@ namespace VulkanResources
 		std::vector<VkCommandBuffer>	vkCommandBuffers;
 
 		VkSurfaceKHR					vkSurface					= VK_NULL_HANDLE;
-		uint32_t						surfaceHeight				= 600;
-		uint32_t						surfaceWidth				= 940;
+		uint32_t						surfaceHeight				= 0;
+		uint32_t						surfaceWidth				= 0;
 	};
 }

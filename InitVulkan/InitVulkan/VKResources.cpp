@@ -60,12 +60,6 @@ void VKResources::InitVKInstance()
 	}
 }
 
-void VKResources::DestroyVKInstance()
-{
-	vkDestroyInstance( vkInstance, VK_NULL_HANDLE );
-	vkInstance = VK_NULL_HANDLE;
-}
-
 void VKResources::InitDevice()
 {
 	// Get physical device handle
@@ -185,7 +179,7 @@ void VKResources::PresentQueue( uint32_t imageIndex )
 	}
 }
 
-uint32_t VKResources::AcquireImage()
+uint32_t VKResources::AcquireImageIndex()
 {
 	uint32_t image_index;
 	VkResult result = vkAcquireNextImageKHR(
@@ -352,8 +346,13 @@ void VKResources::CreateSurface( GLFWwindow* window )
 	}
 }
 
-VkSurfaceFormatKHR VKResources::GetSwapChainFormat( std::vector<VkSurfaceFormatKHR> &surfaceFormats )
+VkSurfaceFormatKHR VKResources::GetSwapChainFormat()
 {
+	uint32_t formatCount = 0;
+	vkGetPhysicalDeviceSurfaceFormatsKHR( selectedGPU, vkSurface, &formatCount, VK_NULL_HANDLE );
+	std::vector<VkSurfaceFormatKHR> surfaceFormats( formatCount );
+	vkGetPhysicalDeviceSurfaceFormatsKHR( selectedGPU, vkSurface, &formatCount, surfaceFormats.data() );
+
 	if (surfaceFormats.size() == 1 && surfaceFormats[0].format == VK_FORMAT_UNDEFINED)
 	{
 		return { VK_FORMAT_R8G8B8A8_UNORM, VK_COLORSPACE_SRGB_NONLINEAR_KHR };
@@ -374,38 +373,68 @@ VkSurfaceFormatKHR VKResources::GetSwapChainFormat( std::vector<VkSurfaceFormatK
 	}
 }
 
-void VKResources::CreateSwapChain( int windowHeight, int windowWidth )
+VkImageUsageFlags VKResources::GetSwapChainUsageFlags( VkSurfaceCapabilitiesKHR vkSurfaceCaps )
 {
-	VkResult res;
-
-	if (vkDevice != VK_NULL_HANDLE)
+	// VK_IMAGE_USAGE_TRANSFER_DST image usage is not supported
+	if (vkSurfaceCaps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT)
 	{
-		vkDeviceWaitIdle( vkDevice );
+		printf( "VK_IMAGE_USAGE_TRANSFER_DST image usage is not supported by the swap chain!\n" );
+
+		return VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 	}
 
-	VkSurfaceCapabilitiesKHR vkSurfaceCaps = {};
-	res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR( selectedGPU, vkSurface, &vkSurfaceCaps );
+	return static_cast<VkImageUsageFlags>(-1);
+}
 
-	if (res != VK_SUCCESS)
+VkExtent2D VKResources::GetSwapChainExtent( VkSurfaceCapabilitiesKHR vkSurfaceCaps )
+{
+	if (vkSurfaceCaps.currentExtent.width == -1 || vkSurfaceCaps.currentExtent.height == -1)
 	{
-		assert( 0 && "Vulken error: get physical device surface cap failed!" );
-		glfwTerminate();
-		std::exit( -1 );
-	}
+		VkExtent2D swapChainExtent = { surfaceWidth , surfaceHeight };
 
-	VkExtent2D swapChainExtent = {};
+		if (swapChainExtent.width < vkSurfaceCaps.minImageExtent.width)
+		{
+			swapChainExtent.width = vkSurfaceCaps.minImageExtent.width;
+		}
 
-	if (swapChainExtent.height == -1 && swapChainExtent.width == -1)
-	{
-		swapChainExtent.width = windowWidth;
-		swapChainExtent.height = windowHeight;
+		if (swapChainExtent.height < vkSurfaceCaps.minImageExtent.height)
+		{
+			swapChainExtent.height = vkSurfaceCaps.minImageExtent.height;
+		}
+		
+		if (swapChainExtent.width > vkSurfaceCaps.maxImageExtent.width)
+		{
+			swapChainExtent.width = vkSurfaceCaps.maxImageExtent.width;
+		}
+
+		if (swapChainExtent.height > vkSurfaceCaps.maxImageExtent.height)
+		{
+			swapChainExtent.height = vkSurfaceCaps.maxImageExtent.height;
+		}
+
+		return swapChainExtent;
 	}
 	else
 	{
-		swapChainExtent = vkSurfaceCaps.currentExtent;
+		return vkSurfaceCaps.currentExtent;
 	}
+}
 
-	// Get present modes
+VkSurfaceTransformFlagBitsKHR VKResources::GetSwapChainTransform( VkSurfaceCapabilitiesKHR vkSurfaceCaps )
+{
+	if (vkSurfaceCaps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+	{
+		return VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+	}
+	else
+	{
+		return vkSurfaceCaps.currentTransform;
+	}
+}
+
+VkPresentModeKHR VKResources::GetSwapChainPresentMode()
+{
+	VkResult res;
 	uint32_t presentModeCount = 0;
 
 	res = vkGetPhysicalDeviceSurfacePresentModesKHR( selectedGPU, vkSurface, &presentModeCount, VK_NULL_HANDLE );
@@ -415,20 +444,48 @@ void VKResources::CreateSwapChain( int windowHeight, int windowWidth )
 	res = vkGetPhysicalDeviceSurfacePresentModesKHR( selectedGPU, vkSurface, &presentModeCount, vkPresentModes.data() );
 	assert( res == VK_SUCCESS );
 
-	VkPresentModeKHR vkPresentMode = VK_PRESENT_MODE_FIFO_KHR;
-
+	// Use mailbox as the best choise
 	for (uint32_t i = 0; i < presentModeCount; i++)
 	{
 		if (vkPresentModes[i] == VK_PRESENT_MODE_MAILBOX_KHR)
 		{
-			vkPresentMode = VK_PRESENT_MODE_MAILBOX_KHR;
-			break;
+			return VK_PRESENT_MODE_MAILBOX_KHR;
 		}
+	}
 
-		if (vkPresentModes[i] == VK_PRESENT_MODE_IMMEDIATE_KHR)
+	// Use FIFO if mailbox is not supported
+	for (uint32_t i = 0; i < presentModeCount; i++)
+	{
+		if (vkPresentModes[i] == VK_PRESENT_MODE_FIFO_KHR)
 		{
-			vkPresentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
+			return VK_PRESENT_MODE_FIFO_KHR;
 		}
+	}
+
+	return static_cast<VkPresentModeKHR>(-1);
+}
+
+void VKResources::CreateSwapChain( int windowHeight, int windowWidth )
+{
+	VkResult res;
+
+	if (vkDevice != VK_NULL_HANDLE)
+	{
+		vkDeviceWaitIdle( vkDevice );
+	}
+
+	surfaceWidth = windowWidth;
+	surfaceHeight = windowHeight;
+
+	// Get surface capabilities
+	VkSurfaceCapabilitiesKHR vkSurfaceCaps = {};
+	res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR( selectedGPU, vkSurface, &vkSurfaceCaps );
+
+	if (res != VK_SUCCESS)
+	{
+		assert( 0 && "Vulken error: get physical device surface cap failed!" );
+		glfwTerminate();
+		std::exit( -1 );
 	}
 
 	// Get image count for swap chain
@@ -441,13 +498,16 @@ void VKResources::CreateSwapChain( int windowHeight, int windowWidth )
 		desiredNumberOfImages = vkSurfaceCaps.maxImageCount;
 	}
 
-	uint32_t formatCount = 0;
-	vkGetPhysicalDeviceSurfaceFormatsKHR( selectedGPU, vkSurface, &formatCount, VK_NULL_HANDLE );
-	std::vector<VkSurfaceFormatKHR> surfaceFormats( formatCount );
-	vkGetPhysicalDeviceSurfaceFormatsKHR( selectedGPU, vkSurface, &formatCount, surfaceFormats.data() );
-
 	// Get image format and color space
-	VkSurfaceFormatKHR vkDesiredFormat = GetSwapChainFormat( surfaceFormats );
+	VkSurfaceFormatKHR vkDesiredFormat = GetSwapChainFormat();
+	// Get swap chain extent
+	VkExtent2D swapChainExtent = GetSwapChainExtent( vkSurfaceCaps );
+	// Get swap chain image usage flags
+	VkImageUsageFlags imageUsageFlags = GetSwapChainUsageFlags( vkSurfaceCaps );
+	// Get swap chain transform
+	VkSurfaceTransformFlagBitsKHR swapChainTransform = GetSwapChainTransform( vkSurfaceCaps );
+	// Get present modes
+	VkPresentModeKHR presentMode = GetSwapChainPresentMode();
 	VkSwapchainKHR oldSwapChain = vkSwapChain;
 
 	// Create swap chain
@@ -457,14 +517,14 @@ void VKResources::CreateSwapChain( int windowHeight, int windowWidth )
 	vkSwapChainCreateInfo.minImageCount					= desiredNumberOfImages;
 	vkSwapChainCreateInfo.imageFormat					= vkDesiredFormat.format;
 	vkSwapChainCreateInfo.imageColorSpace				= vkDesiredFormat.colorSpace;
-	vkSwapChainCreateInfo.imageExtent					= { swapChainExtent.width, swapChainExtent.height };
-	vkSwapChainCreateInfo.presentMode					= vkPresentMode;
+	vkSwapChainCreateInfo.imageExtent					= swapChainExtent;
+	vkSwapChainCreateInfo.presentMode					= presentMode;
 	vkSwapChainCreateInfo.imageArrayLayers				= 1;
-	vkSwapChainCreateInfo.imageUsage					= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+	vkSwapChainCreateInfo.imageUsage					= imageUsageFlags;
 	vkSwapChainCreateInfo.imageSharingMode				= VK_SHARING_MODE_EXCLUSIVE;
 	vkSwapChainCreateInfo.queueFamilyIndexCount			= 0;
 	vkSwapChainCreateInfo.pQueueFamilyIndices			= VK_NULL_HANDLE;
-	vkSwapChainCreateInfo.preTransform					= VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+	vkSwapChainCreateInfo.preTransform					= swapChainTransform;
 	vkSwapChainCreateInfo.compositeAlpha				= VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 	vkSwapChainCreateInfo.clipped						= VK_TRUE;
 	vkSwapChainCreateInfo.oldSwapchain					= oldSwapChain;
@@ -475,16 +535,6 @@ void VKResources::CreateSwapChain( int windowHeight, int windowWidth )
 	{
 		vkDestroySwapchainKHR( vkDevice, oldSwapChain, VK_NULL_HANDLE );
 	}
-}
-
-VkInstance VKResources::GetInstance()
-{
-	return vkInstance;
-}
-
-VkSurfaceKHR VKResources::GetSurface()
-{
-	return vkSurface;
 }
 
 bool VKResources::CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList )
@@ -536,6 +586,29 @@ bool VKResources::CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList )
 	return false;
 }
 
+VkInstance VKResources::GetInstance()
+{
+	return vkInstance;
+}
+
+VkSurfaceKHR VKResources::GetSurface()
+{
+	return vkSurface;
+}
+
+void VKResources::DestroyVKInstance()
+{
+	vkDestroyInstance( vkInstance, VK_NULL_HANDLE );
+	vkInstance = VK_NULL_HANDLE;
+}
+
+void VKResources::DestroyDevice()
+{
+	vkDeviceWaitIdle( vkDevice );
+	vkDestroyDevice( vkDevice, VK_NULL_HANDLE );
+	vkDevice = VK_NULL_HANDLE;
+}
+
 void VKResources::DestroySwapChain()
 {
 	// Clear all images and image views
@@ -547,13 +620,6 @@ void VKResources::DestroySwapChain()
 
 	vkDestroySwapchainKHR( vkDevice, vkSwapChain, VK_NULL_HANDLE );
 	vkSwapChain = VK_NULL_HANDLE;
-}
-
-void VKResources::DestroyDevice()
-{
-	vkDeviceWaitIdle( vkDevice );
-	vkDestroyDevice( vkDevice, VK_NULL_HANDLE );
-	vkDevice = VK_NULL_HANDLE;
 }
 
 void VKResources::DestroyCommandPool()
