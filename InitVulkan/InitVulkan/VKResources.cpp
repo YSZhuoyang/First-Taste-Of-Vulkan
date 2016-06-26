@@ -129,7 +129,7 @@ void VKResources::CreateCommandPool()
 	RecordCommandBuffers();
 }
 
-void VKResources::SubmitBuffers( uint32_t imageIndex, VKWindow* vkWindow )
+void VKResources::SubmitBuffers( uint32_t imageIndex, GLFWwindow* window )
 {
 	// Submit image
 	VkPipelineStageFlags waitDstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
@@ -167,7 +167,12 @@ void VKResources::SubmitBuffers( uint32_t imageIndex, VKWindow* vkWindow )
 
 		case VK_ERROR_OUT_OF_DATE_KHR:
 		case VK_SUBOPTIMAL_KHR:
-			OnWindowSizeChanged( vkWindow );
+			int windowWidth;
+			int windowHeight;
+
+			glfwGetWindowSize( window, &windowWidth, &windowHeight );
+			OnWindowSizeChanged( window, windowWidth, windowHeight );
+
 			break;
 
 		default:
@@ -176,7 +181,7 @@ void VKResources::SubmitBuffers( uint32_t imageIndex, VKWindow* vkWindow )
 	}
 }
 
-uint32_t VKResources::AcquireImageIndex( VKWindow* vkWindow )
+uint32_t VKResources::AcquireImageIndex( GLFWwindow* window )
 {
 	uint32_t image_index;
 	VkResult result = vkAcquireNextImageKHR(
@@ -195,7 +200,12 @@ uint32_t VKResources::AcquireImageIndex( VKWindow* vkWindow )
 			break;
 
 		case VK_ERROR_OUT_OF_DATE_KHR:
-			OnWindowSizeChanged( vkWindow );
+			int windowWidth;
+			int windowHeight;
+
+			glfwGetWindowSize( window, &windowWidth, &windowHeight );
+			OnWindowSizeChanged( window, windowWidth, windowHeight );
+
 			break;
 
 		default:
@@ -327,17 +337,9 @@ void VKResources::RecordCommandBuffers()
 	}
 }
 
-void VKResources::OnWindowSizeChanged( VKWindow* vkWindow )
+void VKResources::OnWindowSizeChanged( GLFWwindow* window, int windowWidth, int windowHeight )
 {
-	int windowWidth = 0;
-	int windowHeight = 0;
-
-	glfwGetWindowSize( vkWindow->GetWindowInstance(), &windowWidth, &windowHeight );
-
 	printf( "Window resize callback invoked: size: %d, %d", windowWidth, windowHeight );
-
-	vkWindow->SetWidth( windowWidth );
-	vkWindow->SetHeight( windowHeight );
 
 	// Free command buffers
 	vkDeviceWaitIdle( vkDevice );
@@ -361,6 +363,7 @@ void VKResources::OnWindowSizeChanged( VKWindow* vkWindow )
 
 	// Re-create swap chain
 	CreateSwapChain( windowWidth, windowHeight );
+	CreateCommandPool();
 }
 
 void VKResources::CreateSurface( GLFWwindow* window )

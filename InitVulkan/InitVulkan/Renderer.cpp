@@ -7,7 +7,7 @@ using namespace DataStructures;
 Renderer::Renderer()
 {
 	vkResources = new VKResources();
-	vkWindow = new VKWindow();
+	vkWindow = new VKWindow( vkResources );
 
 	vkWindow->CreateWindow();
 	vkResources->InitVKInstance();
@@ -57,6 +57,6 @@ void Renderer::Update()
 
 void Renderer::Render()
 {
-	uint32_t imageIndex = vkResources->AcquireImageIndex( vkWindow );
-	vkResources->SubmitBuffers( imageIndex, vkWindow );
+	uint32_t imageIndex = vkResources->AcquireImageIndex( vkWindow->GetWindowInstance() );
+	vkResources->SubmitBuffers( imageIndex, vkWindow->GetWindowInstance() );
 }

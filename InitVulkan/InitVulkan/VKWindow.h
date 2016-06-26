@@ -4,14 +4,22 @@
 #include <assert.h>
 #include <cstdlib>
 
+#include "VKResources.h"
+
+using namespace VulkanResources;
+
 
 namespace GLFWWindowResources
 {
 	class VKWindow
 	{
 	public:
-		VKWindow();
+		VKWindow( VKResources* vkResources );
 		~VKWindow();
+
+		// Event handling 
+		void KeyPressEvent( GLFWwindow *window, int key, int scancode, int action, int mods );
+		void WindowResizeEvent( GLFWwindow* window, int width, int height );
 
 		void CreateWindow();
 		void DestroyWindow();
@@ -21,13 +29,10 @@ namespace GLFWWindowResources
 		int GetWidth();
 		GLFWwindow* GetWindowInstance();
 
-		// Callback functions
-		void Resize();
-		void Close();
-
 
 	private:
 		GLFWwindow*						window					= nullptr;
+		VKResources*					vkResources				= nullptr;
 		int								windowHeight			= 640;
 		int								windowWidth				= 960;
 	};
