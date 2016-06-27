@@ -24,7 +24,10 @@ VKResources::VKResources()
 
 VKResources::~VKResources()
 {
+	vkDeviceWaitIdle( vkDevice );
+
 	DestroyCommandPool();
+	DestroySemaphores();
 	DestroySwapChain();
 	DestroySurface();
 	DestroyDevice();
@@ -176,9 +179,136 @@ void VKResources::SubmitBuffers( uint32_t imageIndex, GLFWwindow* window )
 			break;
 
 		default:
-			assert( 0 && "Problem occurred during swap chain image acquisition!" );
+			printf( "Problem occurred during swap chain image acquisition!" );
+
 			break;
 	}
+}
+
+void VKResources::CreateRenderPass()
+{
+	VkResult res;
+
+	VkAttachmentDescription vkAttachmentDesc	= {};
+	vkAttachmentDesc.flags						= 0;
+	vkAttachmentDesc.format						= vkDesiredFormat.format;
+	vkAttachmentDesc.loadOp						= VK_ATTACHMENT_LOAD_OP_CLEAR;		// Clear image before specifying the color
+	vkAttachmentDesc.storeOp					= VK_ATTACHMENT_STORE_OP_STORE;		// Store image before display it on screen
+	vkAttachmentDesc.samples					= VK_SAMPLE_COUNT_1_BIT;			// No multi sampling
+	vkAttachmentDesc.stencilLoadOp				= VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	vkAttachmentDesc.stencilStoreOp				= VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	vkAttachmentDesc.initialLayout				= VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+	vkAttachmentDesc.finalLayout				= VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+	std::vector<VkAttachmentDescription> vkAttachmentDesciptions;
+	vkAttachmentDesciptions.push_back( vkAttachmentDesc );
+
+	/********* Subpass descriptions **********/
+	VkAttachmentReference colorAttachmentRef	= {};
+	colorAttachmentRef.attachment				= 0;
+	colorAttachmentRef.layout					= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+	std::vector<VkAttachmentReference> colorAttachmentRefs;
+	colorAttachmentRefs.push_back( colorAttachmentRef );
+
+	VkSubpassDescription vkSubpassDesc		= {};
+	vkSubpassDesc.flags						= 0;
+	vkSubpassDesc.pipelineBindPoint			= VK_PIPELINE_BIND_POINT_GRAPHICS;
+	vkSubpassDesc.inputAttachmentCount		= 0;
+	vkSubpassDesc.pInputAttachments			= VK_NULL_HANDLE;
+	vkSubpassDesc.colorAttachmentCount		= 1;
+	vkSubpassDesc.pColorAttachments			= colorAttachmentRefs.data();
+	vkSubpassDesc.pResolveAttachments		= VK_NULL_HANDLE;
+	vkSubpassDesc.preserveAttachmentCount	= 0;
+	vkSubpassDesc.pPreserveAttachments		= VK_NULL_HANDLE;
+
+	std::vector<VkSubpassDescription> subpassDescriptions;
+	subpassDescriptions.push_back( vkSubpassDesc );
+
+	VkRenderPassCreateInfo vkRenderPassCreateInfo	= {};
+	vkRenderPassCreateInfo.sType					= VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+	vkRenderPassCreateInfo.pNext					= VK_NULL_HANDLE;
+	vkRenderPassCreateInfo.flags					= 0;
+	vkRenderPassCreateInfo.attachmentCount			= 1;
+	vkRenderPassCreateInfo.pAttachments				= vkAttachmentDesciptions.data();
+	vkRenderPassCreateInfo.subpassCount				= 1;
+	vkRenderPassCreateInfo.pSubpasses				= subpassDescriptions.data();
+	vkRenderPassCreateInfo.dependencyCount			= 0;
+	vkRenderPassCreateInfo.pDependencies			= VK_NULL_HANDLE;
+
+	res = vkCreateRenderPass( vkDevice, &vkRenderPassCreateInfo, VK_NULL_HANDLE, &vkRenderPass );
+
+	if (res != VK_SUCCESS)
+	{
+		printf( "Create renderpass failed" );
+		glfwTerminate();
+	}
+}
+
+void VKResources::CreateFrameBuffers()
+{
+	VkResult res;
+
+	VkComponentMapping components =
+	{
+		VK_COMPONENT_SWIZZLE_IDENTITY,
+		VK_COMPONENT_SWIZZLE_IDENTITY,
+		VK_COMPONENT_SWIZZLE_IDENTITY,
+		VK_COMPONENT_SWIZZLE_IDENTITY
+	};
+
+	VkImageSubresourceRange subsourceRange = 
+	{
+		VK_IMAGE_ASPECT_COLOR_BIT, 
+		0, 
+		1, 
+		0, 
+		1
+	};
+
+	for (uint32_t i = 0; i < imageCount; i++)
+	{
+		VkImageViewCreateInfo imageViewCreateInfo	= {};
+		imageViewCreateInfo.sType					= VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		imageViewCreateInfo.pNext					= VK_NULL_HANDLE;
+		imageViewCreateInfo.flags					= 0;
+		imageViewCreateInfo.image					= vkImages[i];
+		imageViewCreateInfo.viewType				= VK_IMAGE_VIEW_TYPE_2D;
+		imageViewCreateInfo.format					= vkDesiredFormat.format;
+		imageViewCreateInfo.components				= components;
+		imageViewCreateInfo.subresourceRange		= subsourceRange;
+
+		res = vkCreateImageView( vkDevice, &imageViewCreateInfo, VK_NULL_HANDLE, &vkImageViews[i] );
+
+		if (res != VK_SUCCESS)
+		{
+			printf( "Create the %dnd image view failed", i );
+			glfwTerminate();
+		}
+
+		VkFramebufferCreateInfo frameBufferCreateInfo	= {};
+		frameBufferCreateInfo.sType						= VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+		frameBufferCreateInfo.pNext						= VK_NULL_HANDLE;
+		frameBufferCreateInfo.renderPass				= vkRenderPass;
+		frameBufferCreateInfo.flags						= 0;
+		frameBufferCreateInfo.attachmentCount			= 1;
+		frameBufferCreateInfo.pAttachments				= &vkImageViews[i];
+		frameBufferCreateInfo.width						= surfaceWidth;
+		frameBufferCreateInfo.height					= surfaceHeight;
+		frameBufferCreateInfo.layers					= 1;
+
+		res = vkCreateFramebuffer( vkDevice, &frameBufferCreateInfo, VK_NULL_HANDLE, &vkFramebuffers[i] );
+
+		if (res != VK_SUCCESS)
+		{
+			printf( "Create the %dnd framebuffer failed", i );
+			glfwTerminate();
+		}
+	}
+
+	// To be added
+
+
 }
 
 uint32_t VKResources::AcquireImageIndex( GLFWwindow* window )
@@ -232,7 +362,6 @@ void VKResources::CreateCommandBuffers()
 {
 	// Need check
 	// Retrieve number of images / buffers
-	vkGetSwapchainImagesKHR( vkDevice, vkSwapChain, &imageCount, VK_NULL_HANDLE );
 
 	if (imageCount == 0)
 	{
@@ -258,17 +387,14 @@ void VKResources::RecordCommandBuffers()
 {
 	VkResult res;
 
-	std::vector<VkImage> vkImages( imageCount );
-	swapChainBuffers.resize( imageCount );
+	//std::vector<VkImage> vkImages( imageCount );
+	//swapChainBuffers.resize( imageCount );
 
-	res = vkGetSwapchainImagesKHR( vkDevice, vkSwapChain, &imageCount, vkImages.data() );
-	assert( res == VK_SUCCESS );
-
-	VkImageSubresourceRange subresources	= {};
-	subresources.aspectMask					= VK_IMAGE_ASPECT_COLOR_BIT;
-	subresources.baseMipLevel				= 0;
-	subresources.levelCount					= 1;
-	subresources.layerCount					= 1;
+	VkImageSubresourceRange subresources					= {};
+	subresources.aspectMask									= VK_IMAGE_ASPECT_COLOR_BIT;
+	subresources.baseMipLevel								= 0;
+	subresources.levelCount									= 1;
+	subresources.layerCount									= 1;
 
 	VkCommandBufferBeginInfo vkCommandBufferBeginInfo		= {};
 	vkCommandBufferBeginInfo.sType							= VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -341,28 +467,15 @@ void VKResources::OnWindowSizeChanged( GLFWwindow* window, int windowWidth, int 
 {
 	printf( "Window resize callback invoked: size: %d, %d", windowWidth, windowHeight );
 
-	// Free command buffers
 	vkDeviceWaitIdle( vkDevice );
 
-	if ((vkCommandBuffers.size() > 0) && (vkCommandBuffers[0] != VK_NULL_HANDLE))
-	{
-		vkFreeCommandBuffers(
-			vkDevice, 
-			vkCommandPool,
-			static_cast<uint32_t>(vkCommandBuffers.size()),
-			vkCommandBuffers.data()
-		);
-		vkCommandBuffers.clear();
-	}
-
-	if (vkCommandPool != VK_NULL_HANDLE)
-	{
-		vkDestroyCommandPool( vkDevice, vkCommandPool, VK_NULL_HANDLE );
-		vkCommandPool = VK_NULL_HANDLE;
-	}
+	// Free command buffers
+	DestroyCommandPool();
 
 	// Re-create swap chain
 	CreateSwapChain( windowWidth, windowHeight );
+	CreateRenderPass();
+	CreateFrameBuffers();
 	CreateCommandPool();
 }
 
@@ -531,15 +644,15 @@ void VKResources::CreateSwapChain( int windowHeight, int windowWidth )
 	}
 
 	// Get image format and color space
-	VkSurfaceFormatKHR vkDesiredFormat = GetSwapChainFormat();
+	vkDesiredFormat = GetSwapChainFormat();
 	// Get swap chain extent
-	VkExtent2D swapChainExtent = GetSwapChainExtent( vkSurfaceCaps );
+	swapChainExtent = GetSwapChainExtent( vkSurfaceCaps );
 	// Get swap chain image usage flags
-	VkImageUsageFlags imageUsageFlags = GetSwapChainUsageFlags( vkSurfaceCaps );
+	imageUsageFlags = GetSwapChainUsageFlags( vkSurfaceCaps );
 	// Get swap chain transform
-	VkSurfaceTransformFlagBitsKHR swapChainTransform = GetSwapChainTransform( vkSurfaceCaps );
+	swapChainTransform = GetSwapChainTransform( vkSurfaceCaps );
 	// Get present modes
-	VkPresentModeKHR presentMode = GetSwapChainPresentMode();
+	presentMode = GetSwapChainPresentMode();
 	VkSwapchainKHR oldSwapChain = vkSwapChain;
 
 	// Create swap chain
@@ -567,6 +680,16 @@ void VKResources::CreateSwapChain( int windowHeight, int windowWidth )
 	{
 		vkDestroySwapchainKHR( vkDevice, oldSwapChain, VK_NULL_HANDLE );
 	}
+
+	res = vkGetSwapchainImagesKHR( vkDevice, vkSwapChain, &imageCount, VK_NULL_HANDLE );
+	assert( res == VK_SUCCESS );
+
+	vkImages.resize( imageCount );
+	vkImageViews.resize( imageCount );
+	vkFramebuffers.resize( imageCount );
+
+	res = vkGetSwapchainImagesKHR( vkDevice, vkSwapChain, &imageCount, vkImages.data() );
+	assert( res == VK_SUCCESS );
 }
 
 bool VKResources::CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList )
@@ -618,6 +741,15 @@ bool VKResources::CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList )
 	return false;
 }
 
+void VulkanResources::VKResources::DestroySemaphores()
+{
+	if (imageAvailableSemaphore != VK_NULL_HANDLE)
+	{
+		vkDestroySemaphore( vkDevice, imageAvailableSemaphore, VK_NULL_HANDLE );
+		vkDestroySemaphore( vkDevice, renderingFinishedSemaphore, VK_NULL_HANDLE );
+	}
+}
+
 VkInstance VKResources::GetInstance()
 {
 	return vkInstance;
@@ -636,7 +768,6 @@ void VKResources::DestroyVKInstance()
 
 void VKResources::DestroyDevice()
 {
-	vkDeviceWaitIdle( vkDevice );
 	vkDestroyDevice( vkDevice, VK_NULL_HANDLE );
 	vkDevice = VK_NULL_HANDLE;
 }
@@ -644,10 +775,15 @@ void VKResources::DestroyDevice()
 void VKResources::DestroySwapChain()
 {
 	// Clear all images and image views
-	for (SwapChainBuffer buffer : swapChainBuffers)
+	for (uint32_t i = 0; i < imageCount; i++)
 	{
-		vkDestroyImageView( vkDevice, buffer.vkImageView, VK_NULL_HANDLE );
-		vkDestroyImage( vkDevice, buffer.vkImage, VK_NULL_HANDLE );
+		vkDestroyFramebuffer( vkDevice, vkFramebuffers[i], VK_NULL_HANDLE );
+		vkDestroyImageView( vkDevice, vkImageViews[i], VK_NULL_HANDLE );
+		vkDestroyImage( vkDevice, vkImages[i], VK_NULL_HANDLE );
+
+		vkFramebuffers.clear();
+		vkImageViews.clear();
+		vkImages.clear();
 	}
 
 	vkDestroySwapchainKHR( vkDevice, vkSwapChain, VK_NULL_HANDLE );
@@ -656,17 +792,22 @@ void VKResources::DestroySwapChain()
 
 void VKResources::DestroyCommandPool()
 {
-	vkDestroySemaphore( vkDevice, imageAvailableSemaphore, VK_NULL_HANDLE );
-	imageAvailableSemaphore = VK_NULL_HANDLE;
+	if ((vkCommandBuffers.size() > 0) && (vkCommandBuffers[0] != VK_NULL_HANDLE))
+	{
+		vkFreeCommandBuffers(
+			vkDevice,
+			vkCommandPool,
+			static_cast<uint32_t>(vkCommandBuffers.size()),
+			vkCommandBuffers.data()
+		);
+		vkCommandBuffers.clear();
+	}
 
-	vkDestroySemaphore( vkDevice, renderingFinishedSemaphore, VK_NULL_HANDLE );
-	renderingFinishedSemaphore = VK_NULL_HANDLE;
-
-	vkDestroyFence( vkDevice, vkFence, VK_NULL_HANDLE );
-	vkFence = VK_NULL_HANDLE;
-
-	vkDestroyCommandPool( vkDevice, vkCommandPool, VK_NULL_HANDLE );
-	vkCommandPool = VK_NULL_HANDLE;
+	if (vkCommandPool != VK_NULL_HANDLE)
+	{
+		vkDestroyCommandPool( vkDevice, vkCommandPool, VK_NULL_HANDLE );
+		vkCommandPool = VK_NULL_HANDLE;
+	}
 }
 
 void VKResources::DestroySurface()

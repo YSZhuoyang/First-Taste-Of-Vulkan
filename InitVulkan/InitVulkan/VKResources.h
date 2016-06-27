@@ -27,23 +27,26 @@ namespace VulkanResources
 		void CreateSwapChain( int windowHeight, int windowWidth );
 		void CreateCommandPool();
 		void SubmitBuffers( uint32_t imageIndex, GLFWwindow* vkWindow );
+		void CreateRenderPass();
+		void CreateFrameBuffers();
 		void OnWindowSizeChanged( GLFWwindow* vkWindow, int windowWidth, int windowHeight );
 
 		uint32_t AcquireImageIndex( GLFWwindow* vkWindow );
 		VkInstance GetInstance();
 		VkSurfaceKHR GetSurface();
 
-		void DestroyVKInstance();
-		void DestroySwapChain();
-		void DestroyDevice();
-		void DestroyCommandPool();
-		void DestroySurface();
-
 	private:
 		void CreateSemaphores();
 		void CreateCommandBuffers();
 		void RecordCommandBuffers();
 		bool CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList );
+
+		void DestroyVKInstance();
+		void DestroySwapChain();
+		void DestroySemaphores();
+		void DestroyDevice();
+		void DestroyCommandPool();
+		void DestroySurface();
 
 		VkSurfaceFormatKHR GetSwapChainFormat();
 		VkImageUsageFlags GetSwapChainUsageFlags( VkSurfaceCapabilitiesKHR vkSurfaceCaps );
@@ -59,23 +62,34 @@ namespace VulkanResources
 		VkPhysicalDeviceFeatures		GPUFeatures					= {};
 
 		// Swap chain
+		VkSemaphore						imageAvailableSemaphore		= VK_NULL_HANDLE;
+		VkSemaphore						renderingFinishedSemaphore	= VK_NULL_HANDLE;
 		VkSwapchainKHR					vkSwapChain					= VK_NULL_HANDLE;
-		std::vector<SwapChainBuffer>	swapChainBuffers;
+		VkImageUsageFlags				imageUsageFlags				= VK_NULL_HANDLE;
+		VkSurfaceTransformFlagBitsKHR	swapChainTransform;
+		VkPresentModeKHR				presentMode;
+		VkSurfaceFormatKHR				vkDesiredFormat;
+		VkExtent2D						swapChainExtent;
+
+		std::vector<VkImage>			vkImages;
+		std::vector<VkImageView>		vkImageViews; 
+		std::vector<VkFramebuffer>		vkFramebuffers;
 
 		// Command pool
 		VkCommandPool					vkCommandPool				= VK_NULL_HANDLE;
 		VkQueue							vkGraphicsQueue				= VK_NULL_HANDLE;
 		VkQueue							vkPresentQueue				= VK_NULL_HANDLE;
-		VkFence							vkFence						= VK_NULL_HANDLE;
-		VkSemaphore						imageAvailableSemaphore		= VK_NULL_HANDLE;
-		VkSemaphore						renderingFinishedSemaphore	= VK_NULL_HANDLE;
 		uint32_t						graphicsQueueFamilyIndex	= UINT32_MAX;
 		uint32_t						presentQueueFamilyIndex		= UINT32_MAX;
 		uint32_t						imageCount					= 0;
 		std::vector<VkCommandBuffer>	vkCommandBuffers;
 
+		// Surface
 		VkSurfaceKHR					vkSurface					= VK_NULL_HANDLE;
 		uint32_t						surfaceHeight				= 0;
 		uint32_t						surfaceWidth				= 0;
+
+		// Render pass
+		VkRenderPass					vkRenderPass				= VK_NULL_HANDLE;
 	};
 }

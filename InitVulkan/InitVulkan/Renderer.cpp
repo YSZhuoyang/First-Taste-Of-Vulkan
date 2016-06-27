@@ -8,13 +8,6 @@ Renderer::Renderer()
 {
 	vkResources = new VKResources();
 	vkWindow = new VKWindow( vkResources );
-
-	vkWindow->CreateWindow();
-	vkResources->InitVKInstance();
-	vkResources->InitDevice();
-	vkResources->CreateSurface( vkWindow->GetWindowInstance() );
-	vkResources->CreateSwapChain( vkWindow->GetHeight(), vkWindow->GetWidth() );
-	vkResources->CreateCommandPool();
 }
 
 Renderer::~Renderer()
@@ -24,6 +17,16 @@ Renderer::~Renderer()
 
 	delete vkWindow;
 	vkWindow = nullptr;
+}
+
+void Renderer::Init()
+{
+	vkWindow->CreateWindow();
+	vkResources->InitVKInstance();
+	vkResources->InitDevice();
+	vkResources->CreateSurface( vkWindow->GetWindowInstance() );
+	vkResources->CreateSwapChain( vkWindow->GetHeight(), vkWindow->GetWidth() );
+	vkResources->CreateCommandPool();
 }
 
 void Renderer::Stop()
@@ -36,17 +39,16 @@ bool Renderer::IsRunning()
 	return isRunning;
 }
 
-bool Renderer::OnWindowSizeChanged()
+void Renderer::Update()
 {
 
-
-	return true;
 }
 
-void Renderer::Update()
+void Renderer::Run()
 {
 	while (!glfwWindowShouldClose( vkWindow->GetWindowInstance() ))
 	{
+		Update();
 		Render();
 		glfwPollEvents();
 	}

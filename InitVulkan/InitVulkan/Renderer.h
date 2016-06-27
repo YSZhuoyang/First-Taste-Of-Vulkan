@@ -21,13 +21,14 @@ public:
 	Renderer();
 	~Renderer();
 
+	void Init();
 	void Stop();
-	void Update();
+	void Run();
 	bool IsRunning();
-	bool OnWindowSizeChanged();
 
 private:
 	void Render();
+	void Update();
 
 	VKResources*					vkResources				= nullptr;
 	VKWindow*						vkWindow				= nullptr;

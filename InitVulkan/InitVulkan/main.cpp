@@ -7,10 +7,8 @@ int main()
 
 	printf( "Renderer initialized successfully" );
 
-	while (r.IsRunning())
-	{
-		r.Update();
-	}
+	r.Init();
+	r.Run();
 
 	return 0;
 }
