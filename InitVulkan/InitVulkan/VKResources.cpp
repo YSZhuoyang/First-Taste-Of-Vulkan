@@ -780,11 +780,11 @@ void VKResources::DestroySwapChain()
 		vkDestroyFramebuffer( vkDevice, vkFramebuffers[i], VK_NULL_HANDLE );
 		vkDestroyImageView( vkDevice, vkImageViews[i], VK_NULL_HANDLE );
 		vkDestroyImage( vkDevice, vkImages[i], VK_NULL_HANDLE );
-
-		vkFramebuffers.clear();
-		vkImageViews.clear();
-		vkImages.clear();
 	}
+
+	vkFramebuffers.clear();
+	vkImageViews.clear();
+	vkImages.clear();
 
 	vkDestroySwapchainKHR( vkDevice, vkSwapChain, VK_NULL_HANDLE );
 	vkSwapChain = VK_NULL_HANDLE;
