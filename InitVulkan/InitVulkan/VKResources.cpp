@@ -479,6 +479,11 @@ void VKResources::OnWindowSizeChanged( GLFWwindow* window, int windowWidth, int 
 	CreateCommandPool();
 }
 
+void VKResources::CreateShaders()
+{
+	//const std::vector<char> code = 
+}
+
 void VKResources::CreateSurface( GLFWwindow* window )
 {
 	VkResult res = glfwCreateWindowSurface( vkInstance, window, nullptr, &vkSurface );

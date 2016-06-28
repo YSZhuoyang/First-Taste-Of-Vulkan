@@ -11,9 +11,9 @@
 #include "VKWindow.h"
 
 
-using namespace DataStructures;
 using namespace VulkanResources;
 using namespace GLFWWindowResources;
+
 
 class Renderer
 {

@@ -21,17 +21,23 @@ namespace VulkanResources
 		VKResources();
 		~VKResources();
 
+		// Initiations
 		void InitVKInstance();
 		void InitDevice();
 		void CreateSurface( GLFWwindow * window );
 		void CreateSwapChain( int windowHeight, int windowWidth );
 		void CreateCommandPool();
-		void SubmitBuffers( uint32_t imageIndex, GLFWwindow* vkWindow );
 		void CreateRenderPass();
 		void CreateFrameBuffers();
 		void OnWindowSizeChanged( GLFWwindow* vkWindow, int windowWidth, int windowHeight );
 
+		// Graphics pipeline initiations
+		void CreateShaders();
+
+		// Draw calls
 		uint32_t AcquireImageIndex( GLFWwindow* vkWindow );
+		void SubmitBuffers( uint32_t imageIndex, GLFWwindow* vkWindow );
+
 		VkInstance GetInstance();
 		VkSurfaceKHR GetSurface();
 
@@ -71,6 +77,7 @@ namespace VulkanResources
 		VkSurfaceFormatKHR				vkDesiredFormat;
 		VkExtent2D						swapChainExtent;
 
+		uint32_t						imageCount					= 0;
 		std::vector<VkImage>			vkImages;
 		std::vector<VkImageView>		vkImageViews; 
 		std::vector<VkFramebuffer>		vkFramebuffers;
@@ -81,7 +88,6 @@ namespace VulkanResources
 		VkQueue							vkPresentQueue				= VK_NULL_HANDLE;
 		uint32_t						graphicsQueueFamilyIndex	= UINT32_MAX;
 		uint32_t						presentQueueFamilyIndex		= UINT32_MAX;
-		uint32_t						imageCount					= 0;
 		std::vector<VkCommandBuffer>	vkCommandBuffers;
 
 		// Surface

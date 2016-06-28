@@ -150,13 +150,14 @@
   <ItemGroup>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Renderer.cpp" />
+    <ClCompile Include="Utils\Helpers.cpp" />
     <ClCompile Include="VKResources.cpp" />
     <ClCompile Include="VKWindow.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DataStructures.h" />
-    <ClInclude Include="Helper.h" />
     <ClInclude Include="Renderer.h" />
+    <ClInclude Include="Utils\Helpers.h" />
     <ClInclude Include="VKResources.h" />
     <ClInclude Include="VKWindow.h" />
   </ItemGroup>
