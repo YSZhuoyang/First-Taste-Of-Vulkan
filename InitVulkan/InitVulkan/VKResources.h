@@ -9,8 +9,10 @@
 #include <vector>
 
 #include "DataStructures.h"
+#include "Utils\Helpers.h"
 
 using namespace DataStructures;
+using namespace Utils;
 
 
 namespace VulkanResources
@@ -32,7 +34,8 @@ namespace VulkanResources
 		void OnWindowSizeChanged( GLFWwindow* vkWindow, int windowWidth, int windowHeight );
 
 		// Graphics pipeline initiations
-		void CreateShaders();
+		AutoDeleter<VkShaderModule, PFN_vkDestroyShaderModule> CreateShader( const char* filename );
+		void CreatePipeline();
 
 		// Draw calls
 		uint32_t AcquireImageIndex( GLFWwindow* vkWindow );

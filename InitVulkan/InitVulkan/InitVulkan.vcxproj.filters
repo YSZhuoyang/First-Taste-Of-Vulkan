@@ -16,6 +16,9 @@
     <Filter Include="Source Files\Utils">
       <UniqueIdentifier>{9751128a-719e-4a9b-8a98-e93785813d8b}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Resource Files\Shaders">
+      <UniqueIdentifier>{5b53dbc9-5f30-4065-bbec-33d8d38d8f2d}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -50,5 +53,13 @@
     <ClInclude Include="Utils\Helpers.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Shaders\shader.frag">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="Shaders\shader.vert">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
   </ItemGroup>
 </Project>

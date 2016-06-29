@@ -1,8 +1,6 @@
 #include "VKResources.h"
 
-
 using namespace VulkanResources;
-using namespace DataStructures;
 
 VKResources::VKResources()
 {
@@ -169,6 +167,8 @@ void VKResources::SubmitBuffers( uint32_t imageIndex, GLFWwindow* window )
 			break;
 
 		case VK_ERROR_OUT_OF_DATE_KHR:
+			break;
+
 		case VK_SUBOPTIMAL_KHR:
 			int windowWidth;
 			int windowHeight;
@@ -248,7 +248,7 @@ void VKResources::CreateRenderPass()
 void VKResources::CreateFrameBuffers()
 {
 	VkResult res;
-
+	printf( "Creating frame buffers" );
 	VkComponentMapping components =
 	{
 		VK_COMPONENT_SWIZZLE_IDENTITY,
@@ -305,10 +305,6 @@ void VKResources::CreateFrameBuffers()
 			glfwTerminate();
 		}
 	}
-
-	// To be added
-
-
 }
 
 uint32_t VKResources::AcquireImageIndex( GLFWwindow* window )
@@ -326,6 +322,8 @@ uint32_t VKResources::AcquireImageIndex( GLFWwindow* window )
 	switch (result)
 	{
 		case VK_SUCCESS:
+			break;
+
 		case VK_SUBOPTIMAL_KHR:
 			break;
 
@@ -386,9 +384,6 @@ void VKResources::CreateCommandBuffers()
 void VKResources::RecordCommandBuffers()
 {
 	VkResult res;
-
-	//std::vector<VkImage> vkImages( imageCount );
-	//swapChainBuffers.resize( imageCount );
 
 	VkImageSubresourceRange subresources					= {};
 	subresources.aspectMask									= VK_IMAGE_ASPECT_COLOR_BIT;
@@ -479,9 +474,72 @@ void VKResources::OnWindowSizeChanged( GLFWwindow* window, int windowWidth, int 
 	CreateCommandPool();
 }
 
-void VKResources::CreateShaders()
+AutoDeleter<VkShaderModule, PFN_vkDestroyShaderModule> VKResources::CreateShader( const char* filename )
 {
-	//const std::vector<char> code = 
+	VkResult res;
+	const std::vector<char> code = GetBinaryFileContents( filename );
+
+	if (code.size() == 0)
+	{
+		return AutoDeleter<VkShaderModule, PFN_vkDestroyShaderModule>();
+	}
+
+	VkShaderModuleCreateInfo shaderCreateInfo	= {};
+	shaderCreateInfo.sType						= VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+	shaderCreateInfo.codeSize					= code.size();
+	shaderCreateInfo.pCode						= reinterpret_cast<const uint32_t*>(code.data());
+	shaderCreateInfo.flags						= 0;
+	shaderCreateInfo.pNext						= VK_NULL_HANDLE;
+
+	VkShaderModule shader;
+	res = vkCreateShaderModule( vkDevice, &shaderCreateInfo, VK_NULL_HANDLE, &shader );
+
+	if (res != VK_SUCCESS)
+	{
+		printf( "Shader creation failed from file %s", filename );
+
+		return AutoDeleter<VkShaderModule, PFN_vkDestroyShaderModule>();
+	}
+
+	return AutoDeleter<VkShaderModule, PFN_vkDestroyShaderModule>( shader, vkDestroyShaderModule, vkDevice );
+}
+
+void VKResources::CreatePipeline()
+{
+	AutoDeleter<VkShaderModule, PFN_vkDestroyShaderModule> vertexShader =
+		CreateShader( "Shaders/vertexShader.spv" );
+	AutoDeleter<VkShaderModule, PFN_vkDestroyShaderModule> fragmentShader =
+		CreateShader( "Shaders/fragmentShader.spv" );
+
+	if (!vertexShader || !fragmentShader)
+	{
+		printf( "Creating shaders failed" );
+		glfwTerminate();
+	}
+
+	VkPipelineShaderStageCreateInfo vertexShaderStageCreateInfo	= {};
+	vertexShaderStageCreateInfo.sType							= VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	vertexShaderStageCreateInfo.stage							= VK_SHADER_STAGE_VERTEX_BIT;
+	vertexShaderStageCreateInfo.pName							= "main";
+	vertexShaderStageCreateInfo.pNext							= VK_NULL_HANDLE;
+	vertexShaderStageCreateInfo.module							= vertexShader.Get();
+	vertexShaderStageCreateInfo.flags							= 0;
+	vertexShaderStageCreateInfo.pSpecializationInfo				= VK_NULL_HANDLE;
+
+	VkPipelineShaderStageCreateInfo fragShaderStageCreateInfo	= {};
+	fragShaderStageCreateInfo.sType								= VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	fragShaderStageCreateInfo.stage								= VK_SHADER_STAGE_FRAGMENT_BIT;
+	fragShaderStageCreateInfo.pName								= "main";
+	fragShaderStageCreateInfo.pNext								= VK_NULL_HANDLE;
+	fragShaderStageCreateInfo.module							= fragmentShader.Get();
+	fragShaderStageCreateInfo.flags								= 0;
+	fragShaderStageCreateInfo.pSpecializationInfo				= VK_NULL_HANDLE;
+
+	std::vector<VkPipelineShaderStageCreateInfo> shaderStageCreateInfos;
+	shaderStageCreateInfos.push_back( vertexShaderStageCreateInfo );
+	shaderStageCreateInfos.push_back( fragShaderStageCreateInfo );
+
+
 }
 
 void VKResources::CreateSurface( GLFWwindow* window )

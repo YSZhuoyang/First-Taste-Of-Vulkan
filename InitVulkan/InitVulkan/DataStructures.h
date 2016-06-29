@@ -4,10 +4,5 @@
 
 namespace DataStructures
 {
-	struct SwapChainBuffer
-	{
-		VkImage vkImage;
-		VkImageView vkImageView;
-		VkFramebuffer frameBuffer;
-	};
+	
 }

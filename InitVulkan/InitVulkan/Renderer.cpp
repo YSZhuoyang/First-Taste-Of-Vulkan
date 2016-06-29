@@ -26,6 +26,8 @@ void Renderer::Init()
 	vkResources->InitDevice();
 	vkResources->CreateSurface( vkWindow->GetWindowInstance() );
 	vkResources->CreateSwapChain( vkWindow->GetHeight(), vkWindow->GetWidth() );
+	vkResources->CreateRenderPass();
+	vkResources->CreateFrameBuffers();
 	vkResources->CreateCommandPool();
 }
 
