@@ -397,14 +397,34 @@ void VKResources::RecordCommandBuffers()
 	vkCommandBufferBeginInfo.flags							= VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
 	vkCommandBufferBeginInfo.pInheritanceInfo				= VK_NULL_HANDLE;
 
-	VkClearColorValue clearColor =
+	VkClearValue clearColor =
 	{
 		{ 1.0f, 0.8f, 0.4f, 0.0f }
 	};
 
 	for (uint32_t i = 0; i < imageCount; i++)
 	{
-		VkImageMemoryBarrier barrier_from_present_to_clear	= {};
+		vkBeginCommandBuffer( vkCommandBuffers[i], &vkCommandBufferBeginInfo );
+
+		if (vkGraphicsQueue != vkPresentQueue)
+		{
+			VkImageMemoryBarrier barrier_from_present_to_draw = {
+				VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,     // VkStructureType                sType
+				nullptr,                                    // const void                    *pNext
+				VK_ACCESS_MEMORY_READ_BIT,                  // VkAccessFlags                  srcAccessMask
+				VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,       // VkAccessFlags                  dstAccessMask
+				VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,            // VkImageLayout                  oldLayout
+				VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,            // VkImageLayout                  newLayout
+				presentQueueFamilyIndex,			        // uint32_t                       srcQueueFamilyIndex
+				graphicsQueueFamilyIndex,					// uint32_t                       dstQueueFamilyIndex
+				vkImages[i],								// VkImage                        image
+				subresources								// VkImageSubresourceRange        subresourceRange
+			};
+
+			vkCmdPipelineBarrier( vkCommandBuffers[i], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier_from_present_to_draw );
+		}
+
+		/*VkImageMemoryBarrier barrier_from_present_to_clear	= {};
 		barrier_from_present_to_clear.sType					= VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 		barrier_from_present_to_clear.pNext					= VK_NULL_HANDLE;
 		barrier_from_present_to_clear.srcAccessMask			= VK_ACCESS_MEMORY_READ_BIT;
@@ -427,8 +447,6 @@ void VKResources::RecordCommandBuffers()
 		barrier_from_clear_to_present.dstQueueFamilyIndex	= presentQueueFamilyIndex;
 		barrier_from_clear_to_present.image					= vkImages[i];
 		barrier_from_clear_to_present.subresourceRange		= subresources;
-
-		vkBeginCommandBuffer( vkCommandBuffers[i], &vkCommandBufferBeginInfo );
 		
 		vkCmdPipelineBarrier(
 			vkCommandBuffers[i],
@@ -454,6 +472,58 @@ void VKResources::RecordCommandBuffers()
 		{
 			assert( 0 && "Vulken error: could not record command buffers!" );
 			std::exit( -1 );
+		}*/
+		
+		VkRenderPassBeginInfo render_pass_begin_info = {
+			VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,		// VkStructureType                sType
+			VK_NULL_HANDLE,									// const void                    *pNext
+			vkRenderPass,									// VkRenderPass                   renderPass
+			vkFramebuffers[i],								// VkFramebuffer                  framebuffer
+			{												// VkRect2D                       renderArea
+				{                                           // VkOffset2D                     offset
+					0,                                      // int32_t                        x
+					0                                       // int32_t                        y
+				},
+				{                                           // VkExtent2D                     extent
+					surfaceWidth,                           // int32_t                        width
+					surfaceHeight,                          // int32_t                        height
+				}
+			},
+			1,												// uint32_t                       clearValueCount
+			&clearColor										// const VkClearValue            *pClearValues
+		};
+
+		vkCmdBeginRenderPass( vkCommandBuffers[i], &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE );
+
+		vkCmdBindPipeline( vkCommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipeline );
+
+		vkCmdDraw( vkCommandBuffers[i], 3, 1, 0, 0 );
+
+		vkCmdEndRenderPass( vkCommandBuffers[i] );
+
+		if (vkGraphicsQueue != vkPresentQueue)
+		{
+			VkImageMemoryBarrier barrier_from_draw_to_present = {
+				VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,       // VkStructureType              sType
+				nullptr,                                      // const void                  *pNext
+				VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,         // VkAccessFlags                srcAccessMask
+				VK_ACCESS_MEMORY_READ_BIT,                    // VkAccessFlags                dstAccessMask
+				VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,              // VkImageLayout                oldLayout
+				VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,              // VkImageLayout                newLayout
+				graphicsQueueFamilyIndex,					  // uint32_t                     srcQueueFamilyIndex
+				presentQueueFamilyIndex,					  // uint32_t                     dstQueueFamilyIndex
+				vkImages[i],				                  // VkImage                      image
+				subresources					              // VkImageSubresourceRange      subresourceRange
+			};
+
+			vkCmdPipelineBarrier( vkCommandBuffers[i], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 
+				VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier_from_draw_to_present );
+		}
+		
+		if (vkEndCommandBuffer( vkCommandBuffers[i] ) != VK_SUCCESS)
+		{
+			printf( "Could not record command buffer!" );
+			exit( 0 );
 		}
 	}
 }
@@ -504,8 +574,26 @@ AutoDeleter<VkShaderModule, PFN_vkDestroyShaderModule> VKResources::CreateShader
 	return AutoDeleter<VkShaderModule, PFN_vkDestroyShaderModule>( shader, vkDestroyShaderModule, vkDevice );
 }
 
+AutoDeleter<VkPipelineLayout, PFN_vkDestroyPipelineLayout> VKResources::CreatePipelineLayout()
+{
+	VkPipelineLayoutCreateInfo layoutCreateInfo	= {};
+	layoutCreateInfo.sType						= VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	layoutCreateInfo.flags						= 0;
+	layoutCreateInfo.pNext						= VK_NULL_HANDLE;
+	layoutCreateInfo.setLayoutCount				= 0;
+	layoutCreateInfo.pSetLayouts				= VK_NULL_HANDLE;
+	layoutCreateInfo.pPushConstantRanges		= VK_NULL_HANDLE;
+
+	VkPipelineLayout pipelineLayout;
+	vkCreatePipelineLayout( vkDevice, &layoutCreateInfo, VK_NULL_HANDLE, &pipelineLayout );
+
+	return AutoDeleter<VkPipelineLayout, PFN_vkDestroyPipelineLayout>( pipelineLayout, vkDestroyPipelineLayout, vkDevice );
+}
+
 void VKResources::CreatePipeline()
 {
+	VkResult res;
+
 	AutoDeleter<VkShaderModule, PFN_vkDestroyShaderModule> vertexShader =
 		CreateShader( "Shaders/vertexShader.spv" );
 	AutoDeleter<VkShaderModule, PFN_vkDestroyShaderModule> fragmentShader =
@@ -539,7 +627,124 @@ void VKResources::CreatePipeline()
 	shaderStageCreateInfos.push_back( vertexShaderStageCreateInfo );
 	shaderStageCreateInfos.push_back( fragShaderStageCreateInfo );
 
+	VkPipelineVertexInputStateCreateInfo vertexStateCreateInfo	= {};
+	vertexStateCreateInfo.sType									= VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+	vertexStateCreateInfo.flags									= 0;
+	vertexStateCreateInfo.pNext									= VK_NULL_HANDLE;
+	vertexStateCreateInfo.vertexAttributeDescriptionCount		= 0;
+	vertexStateCreateInfo.pVertexAttributeDescriptions			= VK_NULL_HANDLE;
+	vertexStateCreateInfo.vertexBindingDescriptionCount			= 0;
+	vertexStateCreateInfo.pVertexBindingDescriptions			= VK_NULL_HANDLE;
 
+	VkPipelineInputAssemblyStateCreateInfo assemblyStateCreateInfo	= {};
+	assemblyStateCreateInfo.sType									= VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+	assemblyStateCreateInfo.pNext									= VK_NULL_HANDLE;
+	assemblyStateCreateInfo.flags									= 0;
+	assemblyStateCreateInfo.primitiveRestartEnable					= VK_FALSE;
+	assemblyStateCreateInfo.topology								= VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+	// Prepare view port
+	VkViewport viewport = { 0.0f, 0.0f, surfaceWidth, surfaceHeight, 0.0f, 1.0f };
+	VkRect2D rect2D = { {0.0f, 0.0f}, {surfaceWidth, surfaceHeight} };
+
+	VkPipelineViewportStateCreateInfo viewportStateCreateInfo	= {};
+	viewportStateCreateInfo.sType								= VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+	viewportStateCreateInfo.flags								= 0;
+	viewportStateCreateInfo.pNext								= VK_NULL_HANDLE;
+	viewportStateCreateInfo.viewportCount						= 1;
+	viewportStateCreateInfo.pViewports							= &viewport;
+	viewportStateCreateInfo.scissorCount						= 1;
+	viewportStateCreateInfo.pScissors							= &rect2D;
+
+	// Prepare rasterization state
+	VkPipelineRasterizationStateCreateInfo rasterizationStateCreateInfo	= {};
+	rasterizationStateCreateInfo.sType									= VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+	rasterizationStateCreateInfo.flags									= 0;
+	rasterizationStateCreateInfo.pNext									= VK_NULL_HANDLE;
+	rasterizationStateCreateInfo.cullMode								= VK_CULL_MODE_BACK_BIT;
+	rasterizationStateCreateInfo.depthBiasEnable						= VK_FALSE;
+	rasterizationStateCreateInfo.depthBiasConstantFactor				= 0.0f;
+	rasterizationStateCreateInfo.depthClampEnable						= VK_FALSE;
+	rasterizationStateCreateInfo.depthBiasClamp							= 0.0f;
+	rasterizationStateCreateInfo.lineWidth								= 1.0f;
+	rasterizationStateCreateInfo.polygonMode							= VK_POLYGON_MODE_FILL;
+	rasterizationStateCreateInfo.rasterizerDiscardEnable				= VK_FALSE;
+
+	// Prepare multi-sampling state
+	VkPipelineMultisampleStateCreateInfo multisampleStateCreateInfo	= {};
+	multisampleStateCreateInfo.sType								= VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+	multisampleStateCreateInfo.flags								= 0;
+	multisampleStateCreateInfo.pNext								= VK_NULL_HANDLE;
+	multisampleStateCreateInfo.minSampleShading						= 1.0f;
+	multisampleStateCreateInfo.rasterizationSamples					= VK_SAMPLE_COUNT_1_BIT;
+	multisampleStateCreateInfo.sampleShadingEnable					= VK_FALSE;
+	multisampleStateCreateInfo.alphaToOneEnable						= VK_FALSE;
+	multisampleStateCreateInfo.alphaToCoverageEnable				= VK_FALSE;
+	multisampleStateCreateInfo.pSampleMask							= VK_NULL_HANDLE;
+
+	// Prepare blending state
+	VkPipelineColorBlendAttachmentState blendAttachmentState	= {};
+	blendAttachmentState.blendEnable							= VK_FALSE;
+	blendAttachmentState.srcAlphaBlendFactor					= VK_BLEND_FACTOR_ONE;
+	blendAttachmentState.dstAlphaBlendFactor					= VK_BLEND_FACTOR_ZERO;
+	blendAttachmentState.alphaBlendOp							= VK_BLEND_OP_ADD;
+	blendAttachmentState.srcColorBlendFactor					= VK_BLEND_FACTOR_ONE;
+	blendAttachmentState.dstColorBlendFactor					= VK_BLEND_FACTOR_ZERO;
+	blendAttachmentState.colorBlendOp							= VK_BLEND_OP_ADD;
+	blendAttachmentState.colorWriteMask							= VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | 
+																VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
+	VkPipelineColorBlendStateCreateInfo colorBlendStateCreateInfo	= {};
+	colorBlendStateCreateInfo.sType									= VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+	colorBlendStateCreateInfo.flags									= 0;
+	colorBlendStateCreateInfo.pNext									= VK_NULL_HANDLE;
+	colorBlendStateCreateInfo.logicOpEnable							= VK_FALSE;
+	colorBlendStateCreateInfo.logicOp								= VK_LOGIC_OP_COPY;
+	colorBlendStateCreateInfo.pAttachments							= &blendAttachmentState;
+	colorBlendStateCreateInfo.attachmentCount						= 1;
+	colorBlendStateCreateInfo.blendConstants[0]						= 0.0f;
+	colorBlendStateCreateInfo.blendConstants[1]						= 0.0f;
+	colorBlendStateCreateInfo.blendConstants[2]						= 0.0f;
+	colorBlendStateCreateInfo.blendConstants[3]						= 0.0f;
+
+	// Prepare pipeline layout
+	AutoDeleter<VkPipelineLayout, PFN_vkDestroyPipelineLayout> pipelineLayout = CreatePipelineLayout();
+
+	if (!pipelineLayout)
+	{
+		printf( "Pipeline layout create failed" );
+		glfwTerminate();
+		exit( 0 );
+	}
+
+	VkGraphicsPipelineCreateInfo graphicsPipelineCreateInfo	= {};
+	graphicsPipelineCreateInfo.sType						= VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+	graphicsPipelineCreateInfo.flags						= 0;
+	graphicsPipelineCreateInfo.pNext						= VK_NULL_HANDLE;
+	graphicsPipelineCreateInfo.layout						= pipelineLayout.Get();
+	graphicsPipelineCreateInfo.stageCount					= static_cast<uint32_t>(shaderStageCreateInfos.size());
+	graphicsPipelineCreateInfo.pStages						= shaderStageCreateInfos.data();
+	graphicsPipelineCreateInfo.pVertexInputState			= &vertexStateCreateInfo;
+	graphicsPipelineCreateInfo.pInputAssemblyState			= &assemblyStateCreateInfo;
+	graphicsPipelineCreateInfo.pTessellationState			= VK_NULL_HANDLE;
+	graphicsPipelineCreateInfo.pViewportState				= &viewportStateCreateInfo;
+	graphicsPipelineCreateInfo.pRasterizationState			= &rasterizationStateCreateInfo;
+	graphicsPipelineCreateInfo.pMultisampleState			= &multisampleStateCreateInfo;
+	graphicsPipelineCreateInfo.pDepthStencilState			= VK_NULL_HANDLE;
+	graphicsPipelineCreateInfo.pColorBlendState				= &colorBlendStateCreateInfo;
+	graphicsPipelineCreateInfo.pDynamicState				= VK_NULL_HANDLE;
+	graphicsPipelineCreateInfo.renderPass					= vkRenderPass;
+	graphicsPipelineCreateInfo.subpass						= 0;
+	graphicsPipelineCreateInfo.basePipelineHandle			= VK_NULL_HANDLE;
+	graphicsPipelineCreateInfo.basePipelineIndex			= -1;
+
+	res = vkCreateGraphicsPipelines( vkDevice, VK_NULL_HANDLE, 1, &graphicsPipelineCreateInfo, VK_NULL_HANDLE, &vkPipeline );
+
+	if (res != VK_SUCCESS)
+	{
+		printf( "Create graphics pipeline failed" );
+		exit( 0 );
+	}
 }
 
 void VKResources::CreateSurface( GLFWwindow* window )

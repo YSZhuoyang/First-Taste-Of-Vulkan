@@ -28,6 +28,7 @@ void Renderer::Init()
 	vkResources->CreateSwapChain( vkWindow->GetHeight(), vkWindow->GetWidth() );
 	vkResources->CreateRenderPass();
 	vkResources->CreateFrameBuffers();
+	//vkResources->CreatePipeline();
 	vkResources->CreateCommandPool();
 }
 

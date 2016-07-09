@@ -30,12 +30,9 @@ namespace VulkanResources
 		void CreateSwapChain( int windowHeight, int windowWidth );
 		void CreateCommandPool();
 		void CreateRenderPass();
+		void CreatePipeline();
 		void CreateFrameBuffers();
 		void OnWindowSizeChanged( GLFWwindow* vkWindow, int windowWidth, int windowHeight );
-
-		// Graphics pipeline initiations
-		AutoDeleter<VkShaderModule, PFN_vkDestroyShaderModule> CreateShader( const char* filename );
-		void CreatePipeline();
 
 		// Draw calls
 		uint32_t AcquireImageIndex( GLFWwindow* vkWindow );
@@ -56,6 +53,10 @@ namespace VulkanResources
 		void DestroyDevice();
 		void DestroyCommandPool();
 		void DestroySurface();
+
+		// Graphics pipeline initiations
+		AutoDeleter<VkShaderModule, PFN_vkDestroyShaderModule> CreateShader( const char* filename );
+		AutoDeleter<VkPipelineLayout, PFN_vkDestroyPipelineLayout> CreatePipelineLayout();
 
 		VkSurfaceFormatKHR GetSwapChainFormat();
 		VkImageUsageFlags GetSwapChainUsageFlags( VkSurfaceCapabilitiesKHR vkSurfaceCaps );
@@ -98,7 +99,8 @@ namespace VulkanResources
 		uint32_t						surfaceHeight				= 0;
 		uint32_t						surfaceWidth				= 0;
 
-		// Render pass
+		// Graphics pipelines
 		VkRenderPass					vkRenderPass				= VK_NULL_HANDLE;
+		VkPipeline						vkPipeline					= VK_NULL_HANDLE;
 	};
 }
