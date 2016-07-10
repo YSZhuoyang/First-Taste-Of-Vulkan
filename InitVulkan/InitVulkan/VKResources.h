@@ -51,6 +51,7 @@ namespace VulkanResources
 		void DestroySwapChain();
 		void DestroySemaphores();
 		void DestroyDevice();
+		void DestroyPipeline();
 		void DestroyCommandPool();
 		void DestroySurface();
 

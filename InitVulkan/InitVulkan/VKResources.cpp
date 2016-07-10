@@ -25,6 +25,7 @@ VKResources::~VKResources()
 	vkDeviceWaitIdle( vkDevice );
 
 	DestroyCommandPool();
+	DestroyPipeline();
 	DestroySemaphores();
 	DestroySwapChain();
 	DestroySurface();
@@ -505,7 +506,7 @@ void VKResources::RecordCommandBuffers()
 		{
 			VkImageMemoryBarrier barrier_from_draw_to_present = {
 				VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,       // VkStructureType              sType
-				nullptr,                                      // const void                  *pNext
+				VK_NULL_HANDLE,                                      // const void                  *pNext
 				VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,         // VkAccessFlags                srcAccessMask
 				VK_ACCESS_MEMORY_READ_BIT,                    // VkAccessFlags                dstAccessMask
 				VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,              // VkImageLayout                oldLayout
@@ -517,7 +518,7 @@ void VKResources::RecordCommandBuffers()
 			};
 
 			vkCmdPipelineBarrier( vkCommandBuffers[i], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 
-				VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier_from_draw_to_present );
+				VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, VK_NULL_HANDLE, 0, VK_NULL_HANDLE, 1, &barrier_from_draw_to_present );
 		}
 		
 		if (vkEndCommandBuffer( vkCommandBuffers[i] ) != VK_SUCCESS)
@@ -595,9 +596,9 @@ void VKResources::CreatePipeline()
 	VkResult res;
 
 	AutoDeleter<VkShaderModule, PFN_vkDestroyShaderModule> vertexShader =
-		CreateShader( "Shaders/vertexShader.spv" );
+		CreateShader( "Shaders/vert.spv" );
 	AutoDeleter<VkShaderModule, PFN_vkDestroyShaderModule> fragmentShader =
-		CreateShader( "Shaders/fragmentShader.spv" );
+		CreateShader( "Shaders/frag.spv" );
 
 	if (!vertexShader || !fragmentShader)
 	{
@@ -1038,6 +1039,12 @@ void VKResources::DestroyDevice()
 {
 	vkDestroyDevice( vkDevice, VK_NULL_HANDLE );
 	vkDevice = VK_NULL_HANDLE;
+}
+
+void VKResources::DestroyPipeline()
+{
+	vkDestroyPipeline( vkDevice, vkPipeline, VK_NULL_HANDLE );
+	vkPipeline = VK_NULL_HANDLE;
 }
 
 void VKResources::DestroySwapChain()
