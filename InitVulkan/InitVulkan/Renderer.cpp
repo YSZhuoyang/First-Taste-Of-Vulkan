@@ -42,6 +42,17 @@ bool Renderer::IsRunning()
 	return isRunning;
 }
 
+void Renderer::UploadVertexData()
+{
+	Vertex vertexData[] = {
+		{ -0.7f, -0.7f, 0.0f, 1.0f },
+		{ -0.7f, 0.7f, 0.0f, 1.0f },
+		{ 0.7f, -0.7f, 0.0f, 1.0f }
+	};
+
+	vkResources->CreateVertexBuffer( vertexData );
+}
+
 void Renderer::Update()
 {
 

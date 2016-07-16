@@ -34,6 +34,9 @@ namespace VulkanResources
 		void CreateFrameBuffers();
 		void OnWindowSizeChanged( GLFWwindow* vkWindow, int windowWidth, int windowHeight );
 
+		// Input buffer creation
+		void CreateVertexBuffer( Vertex* vertexData );
+
 		// Draw calls
 		uint32_t AcquireImageIndex( GLFWwindow* vkWindow );
 		void SubmitBuffers( uint32_t imageIndex, GLFWwindow* vkWindow );
@@ -94,6 +97,9 @@ namespace VulkanResources
 		uint32_t						graphicsQueueFamilyIndex	= UINT32_MAX;
 		uint32_t						presentQueueFamilyIndex		= UINT32_MAX;
 		std::vector<VkCommandBuffer>	vkCommandBuffers;
+
+		// Vertex buffer
+		VkBuffer						vertexBuffer				= VK_NULL_HANDLE;
 
 		// Surface
 		VkSurfaceKHR					vkSurface					= VK_NULL_HANDLE;

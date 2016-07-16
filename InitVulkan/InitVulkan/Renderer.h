@@ -26,6 +26,8 @@ public:
 	void Run();
 	bool IsRunning();
 
+	void UploadVertexData();
+
 private:
 	void Render();
 	void Update();

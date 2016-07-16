@@ -204,7 +204,6 @@ void VKResources::CreateRenderPass()
 	std::vector<VkAttachmentDescription> vkAttachmentDesciptions;
 	vkAttachmentDesciptions.push_back( vkAttachmentDesc );
 
-	/********* Subpass descriptions **********/
 	VkAttachmentReference colorAttachmentRef	= {};
 	colorAttachmentRef.attachment				= 0;
 	colorAttachmentRef.layout					= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -212,6 +211,7 @@ void VKResources::CreateRenderPass()
 	std::vector<VkAttachmentReference> colorAttachmentRefs;
 	colorAttachmentRefs.push_back( colorAttachmentRef );
 
+	/************** Subpass descriptions **************/
 	VkSubpassDescription vkSubpassDesc		= {};
 	vkSubpassDesc.flags						= 0;
 	vkSubpassDesc.pipelineBindPoint			= VK_PIPELINE_BIND_POINT_GRAPHICS;
@@ -226,6 +226,30 @@ void VKResources::CreateRenderPass()
 	std::vector<VkSubpassDescription> subpassDescriptions;
 	subpassDescriptions.push_back( vkSubpassDesc );
 
+	/*************** Subpass dependency ***************/
+	VkSubpassDependency subpassDepSrc	= {};
+	subpassDepSrc.srcSubpass			= VK_SUBPASS_EXTERNAL;
+	subpassDepSrc.dstSubpass			= 0;
+	subpassDepSrc.srcStageMask			= VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+	subpassDepSrc.dstStageMask			= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	subpassDepSrc.srcAccessMask			= VK_ACCESS_MEMORY_READ_BIT;
+	subpassDepSrc.dstAccessMask			= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+	subpassDepSrc.dependencyFlags		= VK_DEPENDENCY_BY_REGION_BIT;
+
+	VkSubpassDependency subpassDepDst	= {};
+	subpassDepDst.srcSubpass			= 0;
+	subpassDepDst.dstSubpass			= VK_SUBPASS_EXTERNAL;
+	subpassDepDst.srcStageMask			= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	subpassDepDst.dstStageMask			= VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+	subpassDepDst.srcAccessMask			= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+	subpassDepDst.dstAccessMask			= VK_ACCESS_MEMORY_READ_BIT;
+	subpassDepDst.dependencyFlags		= VK_DEPENDENCY_BY_REGION_BIT;
+
+	std::vector<VkSubpassDependency> subpassDependencies;
+	subpassDependencies.push_back( subpassDepSrc );
+	subpassDependencies.push_back( subpassDepDst );
+
+	/************* Create render pass **************/
 	VkRenderPassCreateInfo vkRenderPassCreateInfo	= {};
 	vkRenderPassCreateInfo.sType					= VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
 	vkRenderPassCreateInfo.pNext					= VK_NULL_HANDLE;
@@ -234,8 +258,8 @@ void VKResources::CreateRenderPass()
 	vkRenderPassCreateInfo.pAttachments				= vkAttachmentDesciptions.data();
 	vkRenderPassCreateInfo.subpassCount				= 1;
 	vkRenderPassCreateInfo.pSubpasses				= subpassDescriptions.data();
-	vkRenderPassCreateInfo.dependencyCount			= 0;
-	vkRenderPassCreateInfo.pDependencies			= VK_NULL_HANDLE;
+	vkRenderPassCreateInfo.dependencyCount			= static_cast<uint32_t>(subpassDependencies.size());
+	vkRenderPassCreateInfo.pDependencies			= subpassDependencies.data();
 
 	res = vkCreateRenderPass( vkDevice, &vkRenderPassCreateInfo, VK_NULL_HANDLE, &vkRenderPass );
 
@@ -384,7 +408,7 @@ void VKResources::CreateCommandBuffers()
 
 void VKResources::RecordCommandBuffers()
 {
-	VkResult res;
+	//VkResult res;
 
 	VkImageSubresourceRange subresources					= {};
 	subresources.aspectMask									= VK_IMAGE_ASPECT_COLOR_BIT;
@@ -411,7 +435,7 @@ void VKResources::RecordCommandBuffers()
 		{
 			VkImageMemoryBarrier barrier_from_present_to_draw = {
 				VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,     // VkStructureType                sType
-				nullptr,                                    // const void                    *pNext
+				VK_NULL_HANDLE,                             // const void                    *pNext
 				VK_ACCESS_MEMORY_READ_BIT,                  // VkAccessFlags                  srcAccessMask
 				VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,       // VkAccessFlags                  dstAccessMask
 				VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,            // VkImageLayout                  oldLayout
@@ -422,59 +446,9 @@ void VKResources::RecordCommandBuffers()
 				subresources								// VkImageSubresourceRange        subresourceRange
 			};
 
-			vkCmdPipelineBarrier( vkCommandBuffers[i], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier_from_present_to_draw );
+			vkCmdPipelineBarrier( vkCommandBuffers[i], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, VK_NULL_HANDLE, 0, VK_NULL_HANDLE, 1, &barrier_from_present_to_draw );
 		}
 
-		/*VkImageMemoryBarrier barrier_from_present_to_clear	= {};
-		barrier_from_present_to_clear.sType					= VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		barrier_from_present_to_clear.pNext					= VK_NULL_HANDLE;
-		barrier_from_present_to_clear.srcAccessMask			= VK_ACCESS_MEMORY_READ_BIT;
-		barrier_from_present_to_clear.dstAccessMask			= VK_ACCESS_TRANSFER_WRITE_BIT;
-		barrier_from_present_to_clear.oldLayout				= VK_IMAGE_LAYOUT_UNDEFINED;
-		barrier_from_present_to_clear.newLayout				= VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-		barrier_from_present_to_clear.srcQueueFamilyIndex	= presentQueueFamilyIndex;
-		barrier_from_present_to_clear.dstQueueFamilyIndex	= presentQueueFamilyIndex;
-		barrier_from_present_to_clear.image					= vkImages[i];
-		barrier_from_present_to_clear.subresourceRange		= subresources;
-
-		VkImageMemoryBarrier barrier_from_clear_to_present	= {};
-		barrier_from_clear_to_present.sType					= VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		barrier_from_clear_to_present.pNext					= VK_NULL_HANDLE;
-		barrier_from_clear_to_present.srcAccessMask			= VK_ACCESS_TRANSFER_WRITE_BIT;
-		barrier_from_clear_to_present.dstAccessMask			= VK_ACCESS_MEMORY_READ_BIT;
-		barrier_from_clear_to_present.oldLayout				= VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-		barrier_from_clear_to_present.newLayout				= VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-		barrier_from_clear_to_present.srcQueueFamilyIndex	= presentQueueFamilyIndex;
-		barrier_from_clear_to_present.dstQueueFamilyIndex	= presentQueueFamilyIndex;
-		barrier_from_clear_to_present.image					= vkImages[i];
-		barrier_from_clear_to_present.subresourceRange		= subresources;
-		
-		vkCmdPipelineBarrier(
-			vkCommandBuffers[i],
-			VK_PIPELINE_STAGE_TRANSFER_BIT,
-			VK_PIPELINE_STAGE_TRANSFER_BIT,
-			0, 0, VK_NULL_HANDLE, 0, VK_NULL_HANDLE, 1,
-			&barrier_from_present_to_clear );
-		vkCmdClearColorImage(
-			vkCommandBuffers[i],
-			vkImages[i],
-			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			&clearColor, 1, &subresources );
-		vkCmdPipelineBarrier(
-			vkCommandBuffers[i],
-			VK_PIPELINE_STAGE_TRANSFER_BIT,
-			VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-			0, 0, VK_NULL_HANDLE, 0, VK_NULL_HANDLE, 1,
-			&barrier_from_clear_to_present );
-
-		res = vkEndCommandBuffer( vkCommandBuffers[i] );
-
-		if (res != VK_SUCCESS)
-		{
-			assert( 0 && "Vulken error: could not record command buffers!" );
-			std::exit( -1 );
-		}*/
-		
 		VkRenderPassBeginInfo render_pass_begin_info = {
 			VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,		// VkStructureType                sType
 			VK_NULL_HANDLE,									// const void                    *pNext
@@ -495,18 +469,15 @@ void VKResources::RecordCommandBuffers()
 		};
 
 		vkCmdBeginRenderPass( vkCommandBuffers[i], &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE );
-
 		vkCmdBindPipeline( vkCommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipeline );
-
 		vkCmdDraw( vkCommandBuffers[i], 3, 1, 0, 0 );
-
 		vkCmdEndRenderPass( vkCommandBuffers[i] );
 
 		if (vkGraphicsQueue != vkPresentQueue)
 		{
 			VkImageMemoryBarrier barrier_from_draw_to_present = {
 				VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,       // VkStructureType              sType
-				VK_NULL_HANDLE,                                      // const void                  *pNext
+				VK_NULL_HANDLE,                               // const void                  *pNext
 				VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,         // VkAccessFlags                srcAccessMask
 				VK_ACCESS_MEMORY_READ_BIT,                    // VkAccessFlags                dstAccessMask
 				VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,              // VkImageLayout                oldLayout
@@ -543,6 +514,23 @@ void VKResources::OnWindowSizeChanged( GLFWwindow* window, int windowWidth, int 
 	CreateRenderPass();
 	CreateFrameBuffers();
 	CreateCommandPool();
+}
+
+void VKResources::CreateVertexBuffer( Vertex* vertexData )
+{
+	printf( "Vertex buffer size: %d", sizeof( vertexData ) );
+
+	VkBufferCreateInfo bufferCreateInfo		= {};
+	bufferCreateInfo.sType					= VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	bufferCreateInfo.flags					= 0;
+	bufferCreateInfo.pNext					= VK_NULL_HANDLE;
+	bufferCreateInfo.size					= sizeof( vertexData );
+	bufferCreateInfo.usage					= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+	bufferCreateInfo.sharingMode			= VK_SHARING_MODE_EXCLUSIVE;
+	bufferCreateInfo.pQueueFamilyIndices	= VK_NULL_HANDLE;
+	bufferCreateInfo.queueFamilyIndexCount	= 0;
+
+	vkCreateBuffer( vkDevice, &bufferCreateInfo, VK_NULL_HANDLE, &vertexBuffer );
 }
 
 AutoDeleter<VkShaderModule, PFN_vkDestroyShaderModule> VKResources::CreateShader( const char* filename )
@@ -628,14 +616,32 @@ void VKResources::CreatePipeline()
 	shaderStageCreateInfos.push_back( vertexShaderStageCreateInfo );
 	shaderStageCreateInfos.push_back( fragShaderStageCreateInfo );
 
+	/***************** Vertex input binding & attribute descrition *****************/
+	VkVertexInputBindingDescription vertBindingDesc	= {};
+	vertBindingDesc.stride							= sizeof( Vertex );
+	vertBindingDesc.binding							= 0;
+	vertBindingDesc.inputRate						= VK_VERTEX_INPUT_RATE_VERTEX;
+
+	std::vector<VkVertexInputBindingDescription> vertBindingDescriptions( 1 );
+	vertBindingDescriptions.push_back( vertBindingDesc );
+
+	VkVertexInputAttributeDescription vertAttriDesc	= {};
+	vertAttriDesc.binding							= vertBindingDesc.binding;
+	vertAttriDesc.format							= VK_FORMAT_R32G32B32A32_SFLOAT;
+	vertAttriDesc.location							= 0;
+	vertAttriDesc.offset							= offsetof( Vertex, x );
+
+	std::vector<VkVertexInputAttributeDescription> vertAttriDescriptions( 1 );
+	vertAttriDescriptions.push_back( vertAttriDesc );
+
 	VkPipelineVertexInputStateCreateInfo vertexStateCreateInfo	= {};
 	vertexStateCreateInfo.sType									= VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 	vertexStateCreateInfo.flags									= 0;
 	vertexStateCreateInfo.pNext									= VK_NULL_HANDLE;
-	vertexStateCreateInfo.vertexAttributeDescriptionCount		= 0;
-	vertexStateCreateInfo.pVertexAttributeDescriptions			= VK_NULL_HANDLE;
-	vertexStateCreateInfo.vertexBindingDescriptionCount			= 0;
-	vertexStateCreateInfo.pVertexBindingDescriptions			= VK_NULL_HANDLE;
+	vertexStateCreateInfo.vertexAttributeDescriptionCount		= static_cast<uint32_t>(vertAttriDescriptions.size());
+	vertexStateCreateInfo.pVertexAttributeDescriptions			= vertAttriDescriptions.data();
+	vertexStateCreateInfo.vertexBindingDescriptionCount			= static_cast<uint32_t>(vertBindingDescriptions.size());
+	vertexStateCreateInfo.pVertexBindingDescriptions			= vertBindingDescriptions.data();
 
 	VkPipelineInputAssemblyStateCreateInfo assemblyStateCreateInfo	= {};
 	assemblyStateCreateInfo.sType									= VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -645,17 +651,28 @@ void VKResources::CreatePipeline()
 	assemblyStateCreateInfo.topology								= VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
 	// Prepare view port
-	VkViewport viewport = { 0.0f, 0.0f, surfaceWidth, surfaceHeight, 0.0f, 1.0f };
-	VkRect2D rect2D = { {0.0f, 0.0f}, {surfaceWidth, surfaceHeight} };
+	//VkViewport viewport = { 0.0f, 0.0f, (float) surfaceWidth, (float) surfaceHeight, 0.0f, 1.0f };
+	//VkRect2D rect2D = { {0, 0}, {surfaceWidth, surfaceHeight} };
 
 	VkPipelineViewportStateCreateInfo viewportStateCreateInfo	= {};
 	viewportStateCreateInfo.sType								= VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
 	viewportStateCreateInfo.flags								= 0;
 	viewportStateCreateInfo.pNext								= VK_NULL_HANDLE;
 	viewportStateCreateInfo.viewportCount						= 1;
-	viewportStateCreateInfo.pViewports							= &viewport;
+	viewportStateCreateInfo.pViewports							= VK_NULL_HANDLE;
 	viewportStateCreateInfo.scissorCount						= 1;
-	viewportStateCreateInfo.pScissors							= &rect2D;
+	viewportStateCreateInfo.pScissors							= VK_NULL_HANDLE;
+
+	std::vector<VkDynamicState> dynamicStates;
+	dynamicStates.push_back( VK_DYNAMIC_STATE_VIEWPORT );
+	dynamicStates.push_back( VK_DYNAMIC_STATE_SCISSOR );
+
+	VkPipelineDynamicStateCreateInfo dynamicStateCreateInfo	= {};
+	dynamicStateCreateInfo.sType							= VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+	dynamicStateCreateInfo.flags							= 0;
+	dynamicStateCreateInfo.dynamicStateCount				= static_cast<uint32_t>(dynamicStates.size());
+	dynamicStateCreateInfo.pDynamicStates					= dynamicStates.data();
+	dynamicStateCreateInfo.pNext							= VK_NULL_HANDLE;
 
 	// Prepare rasterization state
 	VkPipelineRasterizationStateCreateInfo rasterizationStateCreateInfo	= {};
@@ -733,7 +750,7 @@ void VKResources::CreatePipeline()
 	graphicsPipelineCreateInfo.pMultisampleState			= &multisampleStateCreateInfo;
 	graphicsPipelineCreateInfo.pDepthStencilState			= VK_NULL_HANDLE;
 	graphicsPipelineCreateInfo.pColorBlendState				= &colorBlendStateCreateInfo;
-	graphicsPipelineCreateInfo.pDynamicState				= VK_NULL_HANDLE;
+	graphicsPipelineCreateInfo.pDynamicState				= &dynamicStateCreateInfo;
 	graphicsPipelineCreateInfo.renderPass					= vkRenderPass;
 	graphicsPipelineCreateInfo.subpass						= 0;
 	graphicsPipelineCreateInfo.basePipelineHandle			= VK_NULL_HANDLE;

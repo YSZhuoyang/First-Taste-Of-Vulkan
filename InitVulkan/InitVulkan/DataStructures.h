@@ -4,5 +4,11 @@
 
 namespace DataStructures
 {
-	
+	struct Vertex
+	{
+		float x;
+		float y;
+		float z;
+		float w;
+	};
 }
