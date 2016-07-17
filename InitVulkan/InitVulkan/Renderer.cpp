@@ -29,7 +29,10 @@ void Renderer::Init()
 	vkResources->CreateRenderPass();
 	vkResources->CreateFrameBuffers();
 	vkResources->CreatePipeline();
+	UploadVertexData();
 	vkResources->CreateCommandPool();
+	vkResources->CreateSemaphores();
+	vkResources->CreateFences();
 }
 
 void Renderer::Stop()
@@ -50,7 +53,7 @@ void Renderer::UploadVertexData()
 		{ 0.7f, -0.7f, 0.0f, 1.0f }
 	};
 
-	vkResources->CreateVertexBuffer( vertexData );
+	vkResources->SetupVertexBuffer( vertexData );
 }
 
 void Renderer::Update()

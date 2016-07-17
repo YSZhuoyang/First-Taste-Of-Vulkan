@@ -24,9 +24,8 @@ VKResources::~VKResources()
 {
 	vkDeviceWaitIdle( vkDevice );
 
-	DestroyCommandPool();
+	DestroyFrameResources();
 	DestroyPipeline();
-	DestroySemaphores();
 	DestroySwapChain();
 	DestroySurface();
 	DestroyDevice();
@@ -110,8 +109,6 @@ void VKResources::InitDevice()
 	vkGetDeviceQueue( vkDevice, graphicsQueueFamilyIndex, 0, &vkGraphicsQueue );
 	vkGetDeviceQueue( vkDevice, presentQueueFamilyIndex, 0, &vkPresentQueue );
 
-	// Create semaphores
-	CreateSemaphores();
 }
 
 void VKResources::CreateCommandPool()
@@ -122,7 +119,8 @@ void VKResources::CreateCommandPool()
 	vkCommandPoolCreateInfo.sType					= VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 	vkCommandPoolCreateInfo.pNext					= VK_NULL_HANDLE;
 	vkCommandPoolCreateInfo.queueFamilyIndex		= presentQueueFamilyIndex;
-	vkCommandPoolCreateInfo.flags					= VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+	vkCommandPoolCreateInfo.flags					= VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | 
+														VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
 
 	res = vkCreateCommandPool( vkDevice, &vkCommandPoolCreateInfo, VK_NULL_HANDLE, &vkCommandPool );
 	assert( res == VK_SUCCESS );
@@ -140,12 +138,13 @@ void VKResources::SubmitBuffers( uint32_t imageIndex, GLFWwindow* window )
 	submitInfo.sType						= VK_STRUCTURE_TYPE_SUBMIT_INFO;
 	submitInfo.pNext						= VK_NULL_HANDLE;
 	submitInfo.waitSemaphoreCount			= 1;
-	submitInfo.pWaitSemaphores				= &imageAvailableSemaphore;
+	submitInfo.pWaitSemaphores				= &frameResources[imageIndex].imageAvailableSemaphore;
 	submitInfo.pWaitDstStageMask			= &waitDstStageMask;
 	submitInfo.commandBufferCount			= 1;
-	submitInfo.pCommandBuffers				= &vkCommandBuffers[imageIndex];
+	submitInfo.pCommandBuffers				= &frameResources[imageIndex].commandBuffer;
+	//submitInfo.pCommandBuffers				= &vkCommandBuffers[imageIndex];
 	submitInfo.signalSemaphoreCount			= 1;
-	submitInfo.pSignalSemaphores			= &renderingFinishedSemaphore;
+	submitInfo.pSignalSemaphores			= &frameResources[imageIndex].renderingFinishedSemaphore;
 
 	vkQueueSubmit( vkPresentQueue, 1, &submitInfo, VK_NULL_HANDLE );
 	
@@ -154,7 +153,7 @@ void VKResources::SubmitBuffers( uint32_t imageIndex, GLFWwindow* window )
 	presentInfo.sType						= VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 	presentInfo.pNext						= VK_NULL_HANDLE;
 	presentInfo.waitSemaphoreCount			= 1;
-	presentInfo.pWaitSemaphores				= &renderingFinishedSemaphore;
+	presentInfo.pWaitSemaphores				= &frameResources[imageIndex].renderingFinishedSemaphore;
 	presentInfo.swapchainCount				= 1;
 	presentInfo.pSwapchains					= &vkSwapChain;
 	presentInfo.pImageIndices				= &imageIndex;
@@ -291,7 +290,7 @@ void VKResources::CreateFrameBuffers()
 		1
 	};
 
-	for (uint32_t i = 0; i < imageCount; i++)
+	for (uint32_t i = 0; i < commandBufferCount; i++)
 	{
 		VkImageViewCreateInfo imageViewCreateInfo	= {};
 		imageViewCreateInfo.sType					= VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -322,7 +321,7 @@ void VKResources::CreateFrameBuffers()
 		frameBufferCreateInfo.height					= surfaceHeight;
 		frameBufferCreateInfo.layers					= 1;
 
-		res = vkCreateFramebuffer( vkDevice, &frameBufferCreateInfo, VK_NULL_HANDLE, &vkFramebuffers[i] );
+		res = vkCreateFramebuffer( vkDevice, &frameBufferCreateInfo, VK_NULL_HANDLE, &frameResources[i].frameBuffer );//&vkFramebuffers[i]
 
 		if (res != VK_SUCCESS)
 		{
@@ -334,12 +333,20 @@ void VKResources::CreateFrameBuffers()
 
 uint32_t VKResources::AcquireImageIndex( GLFWwindow* window )
 {
+	static size_t resource_index = 0;
+	FrameResources &currentFrameResource = frameResources[resource_index];
+
+	resource_index = (resource_index + 1) % commandBufferCount;
+
+	vkWaitForFences( vkDevice, 1, &currentFrameResource.fence, VK_FALSE, 1000000000 );
+	vkResetFences( vkDevice, 1, &currentFrameResource.fence );
+
 	uint32_t image_index;
 	VkResult result = vkAcquireNextImageKHR(
 		vkDevice,
 		vkSwapChain,
 		UINT64_MAX,
-		imageAvailableSemaphore,
+		currentFrameResource.imageAvailableSemaphore,
 		VK_NULL_HANDLE,
 		&image_index
 	);
@@ -377,8 +384,24 @@ void VKResources::CreateSemaphores()
 	vkSemaphoreCreateInfo.pNext					= VK_NULL_HANDLE;
 	vkSemaphoreCreateInfo.flags					= 0;
 
-	vkCreateSemaphore( vkDevice, &vkSemaphoreCreateInfo, VK_NULL_HANDLE, &imageAvailableSemaphore );
-	vkCreateSemaphore( vkDevice, &vkSemaphoreCreateInfo, VK_NULL_HANDLE, &renderingFinishedSemaphore );
+	for (uint32_t i = 0; i < commandBufferCount; i++)
+	{
+		vkCreateSemaphore( vkDevice, &vkSemaphoreCreateInfo, VK_NULL_HANDLE, &frameResources[i].imageAvailableSemaphore );
+		vkCreateSemaphore( vkDevice, &vkSemaphoreCreateInfo, VK_NULL_HANDLE, &frameResources[i].renderingFinishedSemaphore );
+	}
+}
+
+void VKResources::CreateFences()
+{
+	VkFenceCreateInfo fenceCreateInfo	= {};
+	fenceCreateInfo.sType				= VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	fenceCreateInfo.flags				= 0;
+	fenceCreateInfo.pNext				= VK_NULL_HANDLE;
+
+	for (uint32_t i = 0; i < commandBufferCount; i++)
+	{
+		vkCreateFence( vkDevice, &fenceCreateInfo, VK_NULL_HANDLE, &frameResources[i].fence );
+	}
 }
 
 void VKResources::CreateCommandBuffers()
@@ -386,24 +409,27 @@ void VKResources::CreateCommandBuffers()
 	// Need check
 	// Retrieve number of images / buffers
 
-	if (imageCount == 0)
+	/*if (imageCount == 0)
 	{
 		assert( 0 && "Vulken error: get swap chain number failed!" );
 		glfwTerminate();
 		std::exit( -1 );
 	}
 
-	vkCommandBuffers.resize( imageCount );
+	vkCommandBuffers.resize( imageCount );*/
 
-	VkCommandBufferAllocateInfo vkCommandBufferAllocateInfo {};
-	vkCommandBufferAllocateInfo.sType				= VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-	vkCommandBufferAllocateInfo.pNext				= VK_NULL_HANDLE;
-	vkCommandBufferAllocateInfo.commandBufferCount	= imageCount;
-	vkCommandBufferAllocateInfo.commandPool			= vkCommandPool;
-	vkCommandBufferAllocateInfo.level				= VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	VkCommandBufferAllocateInfo vkCommandBufferAllocateInfo	= {};
+	vkCommandBufferAllocateInfo.sType						= VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	vkCommandBufferAllocateInfo.pNext						= VK_NULL_HANDLE;
+	vkCommandBufferAllocateInfo.commandBufferCount			= 1;
+	vkCommandBufferAllocateInfo.commandPool					= vkCommandPool;
+	vkCommandBufferAllocateInfo.level						= VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 
-	// Need check
-	vkAllocateCommandBuffers( vkDevice, &vkCommandBufferAllocateInfo, vkCommandBuffers.data() );
+	for (uint32_t i = 0; i < commandBufferCount; i++)
+	{
+		// Need check
+		vkAllocateCommandBuffers( vkDevice, &vkCommandBufferAllocateInfo, &frameResources[i].commandBuffer );
+	}
 }
 
 void VKResources::RecordCommandBuffers()
@@ -427,9 +453,9 @@ void VKResources::RecordCommandBuffers()
 		{ 1.0f, 0.8f, 0.4f, 0.0f }
 	};
 
-	for (uint32_t i = 0; i < imageCount; i++)
+	for (uint32_t i = 0; i < commandBufferCount; i++)
 	{
-		vkBeginCommandBuffer( vkCommandBuffers[i], &vkCommandBufferBeginInfo );
+		vkBeginCommandBuffer( frameResources[i].commandBuffer, &vkCommandBufferBeginInfo );
 
 		if (vkGraphicsQueue != vkPresentQueue)
 		{
@@ -446,14 +472,14 @@ void VKResources::RecordCommandBuffers()
 				subresources								// VkImageSubresourceRange        subresourceRange
 			};
 
-			vkCmdPipelineBarrier( vkCommandBuffers[i], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, VK_NULL_HANDLE, 0, VK_NULL_HANDLE, 1, &barrier_from_present_to_draw );
+			vkCmdPipelineBarrier( frameResources[i].commandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, VK_NULL_HANDLE, 0, VK_NULL_HANDLE, 1, &barrier_from_present_to_draw );
 		}
 
 		VkRenderPassBeginInfo render_pass_begin_info = {
 			VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,		// VkStructureType                sType
 			VK_NULL_HANDLE,									// const void                    *pNext
 			vkRenderPass,									// VkRenderPass                   renderPass
-			vkFramebuffers[i],								// VkFramebuffer                  framebuffer
+			frameResources[i].frameBuffer,					// VkFramebuffer                  framebuffer
 			{												// VkRect2D                       renderArea
 				{                                           // VkOffset2D                     offset
 					0,                                      // int32_t                        x
@@ -468,10 +494,10 @@ void VKResources::RecordCommandBuffers()
 			&clearColor										// const VkClearValue            *pClearValues
 		};
 
-		vkCmdBeginRenderPass( vkCommandBuffers[i], &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE );
-		vkCmdBindPipeline( vkCommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipeline );
-		vkCmdDraw( vkCommandBuffers[i], 3, 1, 0, 0 );
-		vkCmdEndRenderPass( vkCommandBuffers[i] );
+		vkCmdBeginRenderPass( frameResources[i].commandBuffer, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE );
+		vkCmdBindPipeline( frameResources[i].commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipeline );
+		vkCmdDraw( frameResources[i].commandBuffer, 3, 1, 0, 0 );
+		vkCmdEndRenderPass( frameResources[i].commandBuffer );
 
 		if (vkGraphicsQueue != vkPresentQueue)
 		{
@@ -488,11 +514,11 @@ void VKResources::RecordCommandBuffers()
 				subresources					              // VkImageSubresourceRange      subresourceRange
 			};
 
-			vkCmdPipelineBarrier( vkCommandBuffers[i], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 
+			vkCmdPipelineBarrier( frameResources[i].commandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
 				VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, VK_NULL_HANDLE, 0, VK_NULL_HANDLE, 1, &barrier_from_draw_to_present );
 		}
 		
-		if (vkEndCommandBuffer( vkCommandBuffers[i] ) != VK_SUCCESS)
+		if (vkEndCommandBuffer( frameResources[i].commandBuffer ) != VK_SUCCESS)
 		{
 			printf( "Could not record command buffer!" );
 			exit( 0 );
@@ -516,21 +542,77 @@ void VKResources::OnWindowSizeChanged( GLFWwindow* window, int windowWidth, int 
 	CreateCommandPool();
 }
 
-void VKResources::CreateVertexBuffer( Vertex* vertexData )
+void VKResources::SetupVertexBuffer( Vertex* vertexData )
 {
-	printf( "Vertex buffer size: %d", sizeof( vertexData ) );
+	vertexMemorySize = sizeof( vertexData );
+
+	printf( "Vertex buffer size: %d", vertexMemorySize );
 
 	VkBufferCreateInfo bufferCreateInfo		= {};
 	bufferCreateInfo.sType					= VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 	bufferCreateInfo.flags					= 0;
 	bufferCreateInfo.pNext					= VK_NULL_HANDLE;
-	bufferCreateInfo.size					= sizeof( vertexData );
+	bufferCreateInfo.size					= vertexMemorySize;
 	bufferCreateInfo.usage					= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 	bufferCreateInfo.sharingMode			= VK_SHARING_MODE_EXCLUSIVE;
 	bufferCreateInfo.pQueueFamilyIndices	= VK_NULL_HANDLE;
 	bufferCreateInfo.queueFamilyIndexCount	= 0;
 
 	vkCreateBuffer( vkDevice, &bufferCreateInfo, VK_NULL_HANDLE, &vertexBuffer );
+
+	/**************** Allocate buffer memory ****************/
+	VkMemoryRequirements vertBufferMemoryRequirement;
+	vkGetBufferMemoryRequirements( vkDevice, vertexBuffer, &vertBufferMemoryRequirement );
+
+	VkPhysicalDeviceMemoryProperties vertMemoryProperties;
+	vkGetPhysicalDeviceMemoryProperties( selectedGPU, &vertMemoryProperties );
+
+	bool memoryGot = false;
+
+	for (uint32_t i = 0; i < vertMemoryProperties.memoryTypeCount; i++)
+	{
+		if ((vertBufferMemoryRequirement.memoryTypeBits & (1 << i)) &&
+			// Make the memory host visible which enable applications read and write access to it, 
+			// with some cost of performance
+			(vertMemoryProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT))
+		{
+			VkMemoryAllocateInfo memoryAllocateInfo	= {};
+			memoryAllocateInfo.sType				= VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			memoryAllocateInfo.pNext				= VK_NULL_HANDLE;
+			memoryAllocateInfo.memoryTypeIndex		= i;
+			memoryAllocateInfo.allocationSize		= vertBufferMemoryRequirement.size;
+
+			vkAllocateMemory( vkDevice, &memoryAllocateInfo, VK_NULL_HANDLE, &vertexBufferMemory );
+			memoryGot = true;
+			break;
+		}
+	}
+
+	if (!memoryGot)
+	{
+		printf( "Allocate vertex buffer memory failed" );
+		exit( 0 );
+	}
+
+	/*************** Bind the buffer with the buffer memory ***************/
+	vkBindBufferMemory( vkDevice, vertexBuffer, vertexBufferMemory, 0 );
+
+	/*************** Acquire a pointer to this memory ***************/
+	void * vertBufferMemoPointer;
+	vkMapMemory( vkDevice, vertexBufferMemory, 0, vertexMemorySize, 0, &vertBufferMemoPointer );
+
+	/*************** Upload vertex data ***************/
+	memcpy( vertBufferMemoPointer, vertexData, vertexMemorySize );
+	VkMappedMemoryRange mappedMemoryRange	= {};
+	mappedMemoryRange.sType					= VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+	mappedMemoryRange.pNext					= VK_NULL_HANDLE;
+	mappedMemoryRange.offset				= 0;
+	mappedMemoryRange.memory				= vertexBufferMemory;
+	mappedMemoryRange.size					= VK_WHOLE_SIZE;
+
+	// Tell the driver which part of the memory was modified
+	vkFlushMappedMemoryRanges( vkDevice, 1, &mappedMemoryRange );
+	vkUnmapMemory( vkDevice, vertexBufferMemory );
 }
 
 AutoDeleter<VkShaderModule, PFN_vkDestroyShaderModule> VKResources::CreateShader( const char* filename )
@@ -970,11 +1052,14 @@ void VKResources::CreateSwapChain( int windowHeight, int windowWidth )
 	res = vkGetSwapchainImagesKHR( vkDevice, vkSwapChain, &imageCount, VK_NULL_HANDLE );
 	assert( res == VK_SUCCESS );
 
-	vkImages.resize( imageCount );
-	vkImageViews.resize( imageCount );
-	vkFramebuffers.resize( imageCount );
+	printf( "Total image count: %d", imageCount );
 
-	res = vkGetSwapchainImagesKHR( vkDevice, vkSwapChain, &imageCount, vkImages.data() );
+	frameResources.resize( commandBufferCount );
+	vkImages.resize( commandBufferCount );
+	vkImageViews.resize( commandBufferCount );
+	//vkFramebuffers.resize( commandBufferCount );
+
+	res = vkGetSwapchainImagesKHR( vkDevice, vkSwapChain, &commandBufferCount, vkImages.data() );
 	assert( res == VK_SUCCESS );
 }
 
@@ -1027,23 +1112,47 @@ bool VKResources::CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList )
 	return false;
 }
 
-void VulkanResources::VKResources::DestroySemaphores()
+void VKResources::DestroyFrameResources()
 {
-	if (imageAvailableSemaphore != VK_NULL_HANDLE)
+	for (uint32_t i = 0; i < commandBufferCount; i++)
 	{
-		vkDestroySemaphore( vkDevice, imageAvailableSemaphore, VK_NULL_HANDLE );
-		vkDestroySemaphore( vkDevice, renderingFinishedSemaphore, VK_NULL_HANDLE );
+		// Destroy frame buffer
+		if (frameResources[i].frameBuffer != VK_NULL_HANDLE)
+		{
+			vkDestroyFramebuffer( vkDevice, frameResources[i].frameBuffer, VK_NULL_HANDLE );
+		}
+
+		// Free command buffer
+		if (frameResources[i].commandBuffer != VK_NULL_HANDLE)
+		{
+			vkFreeCommandBuffers(
+				vkDevice,
+				vkCommandPool,
+				1,
+				&frameResources[i].commandBuffer
+			);
+		}
+
+		// Destroy semaphores and fences
+		if (frameResources[i].imageAvailableSemaphore != VK_NULL_HANDLE)
+		{
+			vkDestroySemaphore( vkDevice, frameResources[i].imageAvailableSemaphore, VK_NULL_HANDLE );
+			vkDestroySemaphore( vkDevice, frameResources[i].renderingFinishedSemaphore, VK_NULL_HANDLE );
+		}
+
+		if (frameResources[i].fence != VK_NULL_HANDLE)
+		{
+			vkDestroyFence( vkDevice, frameResources[i].fence, VK_NULL_HANDLE );
+		}
 	}
-}
 
-VkInstance VKResources::GetInstance()
-{
-	return vkInstance;
-}
+	frameResources.clear();
 
-VkSurfaceKHR VKResources::GetSurface()
-{
-	return vkSurface;
+	if (vkCommandPool != VK_NULL_HANDLE)
+	{
+		vkDestroyCommandPool( vkDevice, vkCommandPool, VK_NULL_HANDLE );
+		vkCommandPool = VK_NULL_HANDLE;
+	}
 }
 
 void VKResources::DestroyVKInstance()
@@ -1060,21 +1169,28 @@ void VKResources::DestroyDevice()
 
 void VKResources::DestroyPipeline()
 {
-	vkDestroyPipeline( vkDevice, vkPipeline, VK_NULL_HANDLE );
-	vkPipeline = VK_NULL_HANDLE;
+	if (vkPipeline != VK_NULL_HANDLE)
+	{
+		vkDestroyPipeline( vkDevice, vkPipeline, VK_NULL_HANDLE );
+		vkPipeline = VK_NULL_HANDLE;
+	}
+	
+	if (vkRenderPass != VK_NULL_HANDLE)
+	{
+		vkDestroyRenderPass( vkDevice, vkRenderPass, VK_NULL_HANDLE );
+		vkRenderPass = VK_NULL_HANDLE;
+	}
 }
 
 void VKResources::DestroySwapChain()
 {
 	// Clear all images and image views
-	for (uint32_t i = 0; i < imageCount; i++)
+	for (uint32_t i = 0; i < commandBufferCount; i++)
 	{
-		vkDestroyFramebuffer( vkDevice, vkFramebuffers[i], VK_NULL_HANDLE );
 		vkDestroyImageView( vkDevice, vkImageViews[i], VK_NULL_HANDLE );
 		vkDestroyImage( vkDevice, vkImages[i], VK_NULL_HANDLE );
 	}
 
-	vkFramebuffers.clear();
 	vkImageViews.clear();
 	vkImages.clear();
 
@@ -1084,15 +1200,17 @@ void VKResources::DestroySwapChain()
 
 void VKResources::DestroyCommandPool()
 {
-	if ((vkCommandBuffers.size() > 0) && (vkCommandBuffers[0] != VK_NULL_HANDLE))
+	for (uint32_t i = 0; i < frameResources.size(); i++)
 	{
-		vkFreeCommandBuffers(
-			vkDevice,
-			vkCommandPool,
-			static_cast<uint32_t>(vkCommandBuffers.size()),
-			vkCommandBuffers.data()
-		);
-		vkCommandBuffers.clear();
+		if ((frameResources[i].commandBuffer != VK_NULL_HANDLE))
+		{
+			vkFreeCommandBuffers(
+				vkDevice,
+				vkCommandPool,
+				1,
+				&frameResources[i].commandBuffer
+			);
+		}
 	}
 
 	if (vkCommandPool != VK_NULL_HANDLE)
@@ -1106,4 +1224,14 @@ void VKResources::DestroySurface()
 {
 	vkDestroySurfaceKHR( vkInstance, vkSurface, VK_NULL_HANDLE );
 	vkSurface = VK_NULL_HANDLE;
+}
+
+VkInstance VKResources::GetInstance()
+{
+	return vkInstance;
+}
+
+VkSurfaceKHR VKResources::GetSurface()
+{
+	return vkSurface;
 }

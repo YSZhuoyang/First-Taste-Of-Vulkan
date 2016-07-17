@@ -32,10 +32,12 @@ namespace VulkanResources
 		void CreateRenderPass();
 		void CreatePipeline();
 		void CreateFrameBuffers();
+		void CreateSemaphores();
+		void CreateFences();
 		void OnWindowSizeChanged( GLFWwindow* vkWindow, int windowWidth, int windowHeight );
 
 		// Input buffer creation
-		void CreateVertexBuffer( Vertex* vertexData );
+		void SetupVertexBuffer( Vertex* vertexData );
 
 		// Draw calls
 		uint32_t AcquireImageIndex( GLFWwindow* vkWindow );
@@ -45,14 +47,13 @@ namespace VulkanResources
 		VkSurfaceKHR GetSurface();
 
 	private:
-		void CreateSemaphores();
 		void CreateCommandBuffers();
 		void RecordCommandBuffers();
 		bool CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList );
 
 		void DestroyVKInstance();
 		void DestroySwapChain();
-		void DestroySemaphores();
+		void DestroyFrameResources();
 		void DestroyDevice();
 		void DestroyPipeline();
 		void DestroyCommandPool();
@@ -76,8 +77,6 @@ namespace VulkanResources
 		VkPhysicalDeviceFeatures		GPUFeatures					= {};
 
 		// Swap chain
-		VkSemaphore						imageAvailableSemaphore		= VK_NULL_HANDLE;
-		VkSemaphore						renderingFinishedSemaphore	= VK_NULL_HANDLE;
 		VkSwapchainKHR					vkSwapChain					= VK_NULL_HANDLE;
 		VkImageUsageFlags				imageUsageFlags				= VK_NULL_HANDLE;
 		VkSurfaceTransformFlagBitsKHR	swapChainTransform;
@@ -88,18 +87,23 @@ namespace VulkanResources
 		uint32_t						imageCount					= 0;
 		std::vector<VkImage>			vkImages;
 		std::vector<VkImageView>		vkImageViews; 
-		std::vector<VkFramebuffer>		vkFramebuffers;
+		//std::vector<VkFramebuffer>		vkFramebuffers;
 
-		// Command pool
+		// Command buffer
+		uint32_t						commandBufferCount			= 3;
+		std::vector<FrameResources>		frameResources;
+
 		VkCommandPool					vkCommandPool				= VK_NULL_HANDLE;
 		VkQueue							vkGraphicsQueue				= VK_NULL_HANDLE;
 		VkQueue							vkPresentQueue				= VK_NULL_HANDLE;
 		uint32_t						graphicsQueueFamilyIndex	= UINT32_MAX;
 		uint32_t						presentQueueFamilyIndex		= UINT32_MAX;
-		std::vector<VkCommandBuffer>	vkCommandBuffers;
+		//std::vector<VkCommandBuffer>	vkCommandBuffers;
 
 		// Vertex buffer
 		VkBuffer						vertexBuffer				= VK_NULL_HANDLE;
+		VkDeviceMemory					vertexBufferMemory			= VK_NULL_HANDLE;
+		uint32_t						vertexMemorySize			= 0;
 
 		// Surface
 		VkSurfaceKHR					vkSurface					= VK_NULL_HANDLE;
