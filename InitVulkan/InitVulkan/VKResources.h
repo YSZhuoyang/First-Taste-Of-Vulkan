@@ -32,6 +32,7 @@ namespace VulkanResources
 		void CreateRenderPass();
 		void CreatePipeline();
 		void CreateFrameBuffers();
+		void CreateFramebuffer( VkFramebuffer &framebuffer, VkImageView image_view );
 		void CreateSemaphores();
 		void CreateFences();
 		void OnWindowSizeChanged( GLFWwindow* vkWindow, int windowWidth, int windowHeight );
@@ -40,15 +41,14 @@ namespace VulkanResources
 		void SetupVertexBuffer( Vertex* vertexData );
 
 		// Draw calls
-		uint32_t AcquireImageIndex( GLFWwindow* vkWindow );
-		void SubmitBuffers( uint32_t imageIndex, GLFWwindow* vkWindow );
+		void AcquireAndSubmitFrame( GLFWwindow* vkWindow );
+		void PrepareFrame(VkCommandBuffer commandBuffer, VkImage &image, VkImageView &imageView, VkFramebuffer &framebuffer);
 
 		VkInstance GetInstance();
 		VkSurfaceKHR GetSurface();
 
 	private:
-		void CreateCommandBuffers();
-		void RecordCommandBuffers();
+		void AllocateCommandBuffers();
 		bool CheckAndSelectGPU( std::vector<VkPhysicalDevice> &gpuList );
 
 		void DestroyVKInstance();

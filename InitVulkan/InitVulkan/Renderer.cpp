@@ -76,6 +76,5 @@ void Renderer::Run()
 
 void Renderer::Render()
 {
-	uint32_t imageIndex = vkResources->AcquireImageIndex( vkWindow->GetWindowInstance() );
-	vkResources->SubmitBuffers( imageIndex, vkWindow->GetWindowInstance() );
+	vkResources->AcquireAndSubmitFrame( vkWindow->GetWindowInstance() );
 }

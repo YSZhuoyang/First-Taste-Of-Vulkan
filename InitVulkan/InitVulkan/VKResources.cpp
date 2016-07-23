@@ -108,7 +108,6 @@ void VKResources::InitDevice()
 	// The param queue index need to be smaller than the queue count
 	vkGetDeviceQueue( vkDevice, graphicsQueueFamilyIndex, 0, &vkGraphicsQueue );
 	vkGetDeviceQueue( vkDevice, presentQueueFamilyIndex, 0, &vkPresentQueue );
-
 }
 
 void VKResources::CreateCommandPool()
@@ -125,64 +124,7 @@ void VKResources::CreateCommandPool()
 	res = vkCreateCommandPool( vkDevice, &vkCommandPoolCreateInfo, VK_NULL_HANDLE, &vkCommandPool );
 	assert( res == VK_SUCCESS );
 
-	CreateCommandBuffers();
-	RecordCommandBuffers();
-}
-
-void VKResources::SubmitBuffers( uint32_t imageIndex, GLFWwindow* window )
-{
-	// Submit image
-	VkPipelineStageFlags waitDstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
-
-	VkSubmitInfo submitInfo					= {};
-	submitInfo.sType						= VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	submitInfo.pNext						= VK_NULL_HANDLE;
-	submitInfo.waitSemaphoreCount			= 1;
-	submitInfo.pWaitSemaphores				= &frameResources[imageIndex].imageAvailableSemaphore;
-	submitInfo.pWaitDstStageMask			= &waitDstStageMask;
-	submitInfo.commandBufferCount			= 1;
-	submitInfo.pCommandBuffers				= &frameResources[imageIndex].commandBuffer;
-	//submitInfo.pCommandBuffers				= &vkCommandBuffers[imageIndex];
-	submitInfo.signalSemaphoreCount			= 1;
-	submitInfo.pSignalSemaphores			= &frameResources[imageIndex].renderingFinishedSemaphore;
-
-	vkQueueSubmit( vkPresentQueue, 1, &submitInfo, VK_NULL_HANDLE );
-	
-	// Present image
-	VkPresentInfoKHR presentInfo			= {};
-	presentInfo.sType						= VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-	presentInfo.pNext						= VK_NULL_HANDLE;
-	presentInfo.waitSemaphoreCount			= 1;
-	presentInfo.pWaitSemaphores				= &frameResources[imageIndex].renderingFinishedSemaphore;
-	presentInfo.swapchainCount				= 1;
-	presentInfo.pSwapchains					= &vkSwapChain;
-	presentInfo.pImageIndices				= &imageIndex;
-	presentInfo.pResults					= VK_NULL_HANDLE;
-
-	VkResult result = vkQueuePresentKHR( vkPresentQueue, &presentInfo );
-
-	switch (result)
-	{
-		case VK_SUCCESS:
-			break;
-
-		case VK_ERROR_OUT_OF_DATE_KHR:
-			break;
-
-		case VK_SUBOPTIMAL_KHR:
-			int windowWidth;
-			int windowHeight;
-
-			glfwGetWindowSize( window, &windowWidth, &windowHeight );
-			OnWindowSizeChanged( window, windowWidth, windowHeight );
-
-			break;
-
-		default:
-			printf( "Problem occurred during swap chain image acquisition!" );
-
-			break;
-	}
+	AllocateCommandBuffers();
 }
 
 void VKResources::CreateRenderPass()
@@ -273,6 +215,7 @@ void VKResources::CreateFrameBuffers()
 {
 	VkResult res;
 	printf( "Creating frame buffers" );
+
 	VkComponentMapping components =
 	{
 		VK_COMPONENT_SWIZZLE_IDENTITY,
@@ -331,7 +274,37 @@ void VKResources::CreateFrameBuffers()
 	}
 }
 
-uint32_t VKResources::AcquireImageIndex( GLFWwindow* window )
+void VKResources::CreateFramebuffer( VkFramebuffer &framebuffer, VkImageView image_view )
+{
+	VkResult res;
+
+	if (framebuffer != VK_NULL_HANDLE)
+	{
+		vkDestroyFramebuffer( vkDevice, framebuffer, VK_NULL_HANDLE );
+	}
+
+	VkFramebufferCreateInfo frameBufferCreateInfo	= {};
+	frameBufferCreateInfo.sType						= VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+	frameBufferCreateInfo.pNext						= VK_NULL_HANDLE;
+	frameBufferCreateInfo.renderPass				= vkRenderPass;
+	frameBufferCreateInfo.flags						= 0;
+	frameBufferCreateInfo.attachmentCount			= 1;
+	frameBufferCreateInfo.pAttachments				= &image_view;
+	frameBufferCreateInfo.width						= swapChainExtent.width;//surfaceWidth;
+	frameBufferCreateInfo.height					= swapChainExtent.height;// surfaceHeight;
+	frameBufferCreateInfo.layers					= 1;
+
+	res = vkCreateFramebuffer( vkDevice, &frameBufferCreateInfo, VK_NULL_HANDLE, &framebuffer );//&vkFramebuffers[i]
+
+	if (res != VK_SUCCESS)
+	{
+		printf( "Create framebuffer failed" );
+		glfwTerminate();
+		exit( 0 );
+	}
+}
+
+void VKResources::AcquireAndSubmitFrame( GLFWwindow* window )
 {
 	static size_t resource_index = 0;
 	FrameResources &currentFrameResource = frameResources[resource_index];
@@ -373,7 +346,182 @@ uint32_t VKResources::AcquireImageIndex( GLFWwindow* window )
 			break;
 	}
 
-	return image_index;
+	PrepareFrame( currentFrameResource.commandBuffer,
+		vkImages[image_index],
+		vkImageViews[image_index],
+		currentFrameResource.frameBuffer );
+
+	// Submit image
+	VkPipelineStageFlags waitDstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
+
+	VkSubmitInfo submitInfo					= {};
+	submitInfo.sType						= VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submitInfo.pNext						= VK_NULL_HANDLE;
+	submitInfo.waitSemaphoreCount			= 1;
+	submitInfo.pWaitSemaphores				= &currentFrameResource.imageAvailableSemaphore;
+	submitInfo.pWaitDstStageMask			= &waitDstStageMask;
+	submitInfo.commandBufferCount			= 1;
+	submitInfo.pCommandBuffers				= &currentFrameResource.commandBuffer;
+	submitInfo.signalSemaphoreCount			= 1;
+	submitInfo.pSignalSemaphores			= &currentFrameResource.renderingFinishedSemaphore;
+
+	vkQueueSubmit( vkPresentQueue, 1, &submitInfo, VK_NULL_HANDLE );
+
+	// Present image
+	VkPresentInfoKHR presentInfo			= {};
+	presentInfo.sType						= VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+	presentInfo.pNext						= VK_NULL_HANDLE;
+	presentInfo.waitSemaphoreCount			= 1;
+	presentInfo.pWaitSemaphores				= &currentFrameResource.renderingFinishedSemaphore;
+	presentInfo.swapchainCount				= 1;
+	presentInfo.pSwapchains					= &vkSwapChain;
+	presentInfo.pImageIndices				= &image_index;
+	presentInfo.pResults					= VK_NULL_HANDLE;
+
+	result = vkQueuePresentKHR( vkPresentQueue, &presentInfo );
+
+	switch (result)
+	{
+		case VK_SUCCESS:
+			break;
+
+		case VK_ERROR_OUT_OF_DATE_KHR:
+			break;
+
+		case VK_SUBOPTIMAL_KHR:
+			int windowWidth;
+			int windowHeight;
+
+			glfwGetWindowSize( window, &windowWidth, &windowHeight );
+			OnWindowSizeChanged( window, windowWidth, windowHeight );
+
+			break;
+
+		default:
+			printf( "Problem occurred during swap chain image acquisition!" );
+
+			break;
+	}
+}
+
+void VKResources::PrepareFrame( VkCommandBuffer commandBuffer, VkImage & image, VkImageView & imageView, VkFramebuffer & framebuffer )
+{
+	CreateFramebuffer( framebuffer, imageView );
+
+	// Begin command buffer
+	VkCommandBufferBeginInfo vkCommandBufferBeginInfo		= {};
+	vkCommandBufferBeginInfo.sType							= VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	vkCommandBufferBeginInfo.pNext							= VK_NULL_HANDLE;
+	vkCommandBufferBeginInfo.flags							= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+	vkCommandBufferBeginInfo.pInheritanceInfo				= VK_NULL_HANDLE;
+
+	vkBeginCommandBuffer( commandBuffer, &vkCommandBufferBeginInfo );
+
+	// Record command buffer
+	VkImageSubresourceRange subresources					= {};
+	subresources.aspectMask									= VK_IMAGE_ASPECT_COLOR_BIT;
+	subresources.baseMipLevel								= 0;
+	subresources.baseArrayLayer								= 0;
+	subresources.levelCount									= 1;
+	subresources.layerCount									= 1;
+
+	VkClearValue clearColor =
+	{
+		{ 1.0f, 0.8f, 0.4f, 0.0f }
+	};
+
+	if (vkGraphicsQueue != vkPresentQueue)
+	{
+		VkImageMemoryBarrier barrier_from_present_to_draw = {
+			VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,     // VkStructureType                sType
+			VK_NULL_HANDLE,                             // const void                    *pNext
+			VK_ACCESS_MEMORY_READ_BIT,                  // VkAccessFlags                  srcAccessMask
+			VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,       // VkAccessFlags                  dstAccessMask
+			VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,            // VkImageLayout                  oldLayout
+			VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,            // VkImageLayout                  newLayout
+			presentQueueFamilyIndex,			        // uint32_t                       srcQueueFamilyIndex
+			graphicsQueueFamilyIndex,					// uint32_t                       dstQueueFamilyIndex
+			image,										// VkImage                        image
+			subresources								// VkImageSubresourceRange        subresourceRange
+		};
+
+		vkCmdPipelineBarrier( commandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, VK_NULL_HANDLE, 0, VK_NULL_HANDLE, 1, &barrier_from_present_to_draw );
+	}
+
+	VkRenderPassBeginInfo render_pass_begin_info = {
+		VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,		// VkStructureType                sType
+		VK_NULL_HANDLE,									// const void                    *pNext
+		vkRenderPass,									// VkRenderPass                   renderPass
+		framebuffer,									// VkFramebuffer                  framebuffer
+		{												// VkRect2D                       renderArea
+			{                                           // VkOffset2D                     offset
+				0,                                      // int32_t                        x
+				0                                       // int32_t                        y
+			},
+			swapChainExtent, 
+		},
+		1,												// uint32_t                       clearValueCount
+		&clearColor										// const VkClearValue            *pClearValues
+	};
+
+	vkCmdBeginRenderPass( commandBuffer, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE );
+	vkCmdBindPipeline( commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipeline );
+
+	VkViewport viewport = {
+		0.0f,                                               // float                                  x
+		0.0f,                                               // float                                  y
+		static_cast<float>(swapChainExtent.width),			// float                                  width
+		static_cast<float>(swapChainExtent.height),			// float                                  height
+		0.0f,                                               // float                                  minDepth
+		1.0f                                                // float                                  maxDepth
+	};
+
+	VkRect2D scissor = {
+		{                                                   // VkOffset2D                             offset
+			0,                                              // int32_t                                x
+			0                                               // int32_t                                y
+		},
+		{                                                   // VkExtent2D                             extent
+			swapChainExtent.width,							// uint32_t                               width
+			swapChainExtent.height							// uint32_t                               height
+		}
+	};
+
+	vkCmdSetViewport( commandBuffer, 0, 1, &viewport );
+	vkCmdSetScissor( commandBuffer, 0, 1, &scissor );
+
+	VkDeviceSize offset = 0;
+	vkCmdBindVertexBuffers( commandBuffer, 0, 1, &vertexBuffer, &offset );
+
+	vkCmdDraw( commandBuffer, 4, 1, 0, 0 );
+
+	vkCmdEndRenderPass( commandBuffer );
+
+	if (vkGraphicsQueue != vkPresentQueue)
+	{
+		VkImageMemoryBarrier barrier_from_draw_to_present = {
+			VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,       // VkStructureType              sType
+			VK_NULL_HANDLE,                               // const void                  *pNext
+			VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,         // VkAccessFlags                srcAccessMask
+			VK_ACCESS_MEMORY_READ_BIT,                    // VkAccessFlags                dstAccessMask
+			VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,              // VkImageLayout                oldLayout
+			VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,              // VkImageLayout                newLayout
+			graphicsQueueFamilyIndex,					  // uint32_t                     srcQueueFamilyIndex
+			presentQueueFamilyIndex,					  // uint32_t                     dstQueueFamilyIndex
+			image,										  // VkImage                      image
+			subresources					              // VkImageSubresourceRange      subresourceRange
+		};
+
+		vkCmdPipelineBarrier( commandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, VK_NULL_HANDLE, 0, VK_NULL_HANDLE, 1, &barrier_from_draw_to_present );
+	}
+
+	if (vkEndCommandBuffer( commandBuffer ) != VK_SUCCESS)
+	{
+		printf( "Could not record command buffer!" );
+		glfwTerminate();
+		exit( 0 );
+	}
 }
 
 void VKResources::CreateSemaphores()
@@ -404,20 +552,8 @@ void VKResources::CreateFences()
 	}
 }
 
-void VKResources::CreateCommandBuffers()
+void VKResources::AllocateCommandBuffers()
 {
-	// Need check
-	// Retrieve number of images / buffers
-
-	/*if (imageCount == 0)
-	{
-		assert( 0 && "Vulken error: get swap chain number failed!" );
-		glfwTerminate();
-		std::exit( -1 );
-	}
-
-	vkCommandBuffers.resize( imageCount );*/
-
 	VkCommandBufferAllocateInfo vkCommandBufferAllocateInfo	= {};
 	vkCommandBufferAllocateInfo.sType						= VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 	vkCommandBufferAllocateInfo.pNext						= VK_NULL_HANDLE;
@@ -429,100 +565,6 @@ void VKResources::CreateCommandBuffers()
 	{
 		// Need check
 		vkAllocateCommandBuffers( vkDevice, &vkCommandBufferAllocateInfo, &frameResources[i].commandBuffer );
-	}
-}
-
-void VKResources::RecordCommandBuffers()
-{
-	//VkResult res;
-
-	VkImageSubresourceRange subresources					= {};
-	subresources.aspectMask									= VK_IMAGE_ASPECT_COLOR_BIT;
-	subresources.baseMipLevel								= 0;
-	subresources.levelCount									= 1;
-	subresources.layerCount									= 1;
-
-	VkCommandBufferBeginInfo vkCommandBufferBeginInfo		= {};
-	vkCommandBufferBeginInfo.sType							= VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	vkCommandBufferBeginInfo.pNext							= VK_NULL_HANDLE;
-	vkCommandBufferBeginInfo.flags							= VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
-	vkCommandBufferBeginInfo.pInheritanceInfo				= VK_NULL_HANDLE;
-
-	VkClearValue clearColor =
-	{
-		{ 1.0f, 0.8f, 0.4f, 0.0f }
-	};
-
-	for (uint32_t i = 0; i < commandBufferCount; i++)
-	{
-		vkBeginCommandBuffer( frameResources[i].commandBuffer, &vkCommandBufferBeginInfo );
-
-		if (vkGraphicsQueue != vkPresentQueue)
-		{
-			VkImageMemoryBarrier barrier_from_present_to_draw = {
-				VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,     // VkStructureType                sType
-				VK_NULL_HANDLE,                             // const void                    *pNext
-				VK_ACCESS_MEMORY_READ_BIT,                  // VkAccessFlags                  srcAccessMask
-				VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,       // VkAccessFlags                  dstAccessMask
-				VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,            // VkImageLayout                  oldLayout
-				VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,            // VkImageLayout                  newLayout
-				presentQueueFamilyIndex,			        // uint32_t                       srcQueueFamilyIndex
-				graphicsQueueFamilyIndex,					// uint32_t                       dstQueueFamilyIndex
-				vkImages[i],								// VkImage                        image
-				subresources								// VkImageSubresourceRange        subresourceRange
-			};
-
-			vkCmdPipelineBarrier( frameResources[i].commandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, VK_NULL_HANDLE, 0, VK_NULL_HANDLE, 1, &barrier_from_present_to_draw );
-		}
-
-		VkRenderPassBeginInfo render_pass_begin_info = {
-			VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,		// VkStructureType                sType
-			VK_NULL_HANDLE,									// const void                    *pNext
-			vkRenderPass,									// VkRenderPass                   renderPass
-			frameResources[i].frameBuffer,					// VkFramebuffer                  framebuffer
-			{												// VkRect2D                       renderArea
-				{                                           // VkOffset2D                     offset
-					0,                                      // int32_t                        x
-					0                                       // int32_t                        y
-				},
-				{                                           // VkExtent2D                     extent
-					surfaceWidth,                           // int32_t                        width
-					surfaceHeight,                          // int32_t                        height
-				}
-			},
-			1,												// uint32_t                       clearValueCount
-			&clearColor										// const VkClearValue            *pClearValues
-		};
-
-		vkCmdBeginRenderPass( frameResources[i].commandBuffer, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE );
-		vkCmdBindPipeline( frameResources[i].commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipeline );
-		vkCmdDraw( frameResources[i].commandBuffer, 3, 1, 0, 0 );
-		vkCmdEndRenderPass( frameResources[i].commandBuffer );
-
-		if (vkGraphicsQueue != vkPresentQueue)
-		{
-			VkImageMemoryBarrier barrier_from_draw_to_present = {
-				VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,       // VkStructureType              sType
-				VK_NULL_HANDLE,                               // const void                  *pNext
-				VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,         // VkAccessFlags                srcAccessMask
-				VK_ACCESS_MEMORY_READ_BIT,                    // VkAccessFlags                dstAccessMask
-				VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,              // VkImageLayout                oldLayout
-				VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,              // VkImageLayout                newLayout
-				graphicsQueueFamilyIndex,					  // uint32_t                     srcQueueFamilyIndex
-				presentQueueFamilyIndex,					  // uint32_t                     dstQueueFamilyIndex
-				vkImages[i],				                  // VkImage                      image
-				subresources					              // VkImageSubresourceRange      subresourceRange
-			};
-
-			vkCmdPipelineBarrier( frameResources[i].commandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-				VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, VK_NULL_HANDLE, 0, VK_NULL_HANDLE, 1, &barrier_from_draw_to_present );
-		}
-		
-		if (vkEndCommandBuffer( frameResources[i].commandBuffer ) != VK_SUCCESS)
-		{
-			printf( "Could not record command buffer!" );
-			exit( 0 );
-		}
 	}
 }
 
@@ -538,7 +580,6 @@ void VKResources::OnWindowSizeChanged( GLFWwindow* window, int windowWidth, int 
 	// Re-create swap chain
 	CreateSwapChain( windowWidth, windowHeight );
 	CreateRenderPass();
-	CreateFrameBuffers();
 	CreateCommandPool();
 }
 
