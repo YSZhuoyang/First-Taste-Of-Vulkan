@@ -3,7 +3,7 @@
 This project uses Assimp as model loader, and GLFW3 for window creation.
 
 Steps to setup Vulkan environment:
-* Install VulkanSDK (current version: 1.0.17.0)
+* Install VulkanSDK (current version: 1.0.21.0)
 * Go to 'Project properties -> Configuration Properties -> VC++ Directory', Added vulkan 'include' folder path to 'include directories', add 'Bin32' folder path in 32 bit mode, add 'Bin' folder path in 64 bit mode to lib directories.
 * Switch to 64 debug mode, and repeat the step 2.
 
